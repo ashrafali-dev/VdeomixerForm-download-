@@ -163,31 +163,46 @@ async function applyAudio(inputPath, outputPath, audioOpts, workDir, jobLog) {
   }
 
   if (mode === 'audio_url' && audioUrl) {
-    // Download audio, then loop it over the video
     const audioDest = path.join(workDir, 'bg_audio');
     const audioFile = await downloadAudioFromUrl(audioUrl, audioDest, jobLog);
 
-    // Get video duration
-    let videoDuration = 0;
-    try {
-      const { execSync } = require('child_process');
-      const out = execSync(`ffprobe -v quiet -show_entries format=duration -of csv=p=0 "${inputPath}"`).toString().trim();
-      videoDuration = parseFloat(out) || 0;
-    } catch (_) {}
+    // Get durations
+    const getDuration = (filePath) => {
+      try {
+        const { execSync } = require('child_process');
+        const out = execSync(`ffprobe -v quiet -show_entries format=duration -of csv=p=0 "${filePath}"`).toString().trim();
+        return parseFloat(out) || 0;
+      } catch (_) { return 0; }
+    };
 
-    jobLog.info(`Video duration: ${videoDuration.toFixed(1)}s — looping audio to match`);
+    const videoDuration = getDuration(inputPath);
+    const audioDuration = getDuration(audioFile);
+    jobLog.info(`📹 Video: ${videoDuration.toFixed(1)}s | 🎵 Audio: ${audioDuration.toFixed(1)}s`);
 
-    await runFFmpeg([
-      '-i', inputPath,
-      '-stream_loop', '-1', '-i', audioFile,
-      '-map', '0:v',
-      '-map', '1:a',
-      '-c:v', 'copy',
-      '-c:a', 'aac', '-b:a', '128k',
-      '-shortest',
-      '-movflags', '+faststart',
-      outputPath,
-    ], jobLog, null);
+    let ffmpegArgs;
+    if (audioDuration > 0 && audioDuration < videoDuration) {
+      // Audio SHORTER → loop করো
+      jobLog.info(`🔁 Audio shorter — looping to fill ${videoDuration.toFixed(1)}s`);
+      ffmpegArgs = [
+        '-i', inputPath,
+        '-stream_loop', '-1', '-i', audioFile,
+        '-map', '0:v', '-map', '1:a',
+        '-c:v', 'copy', '-c:a', 'aac', '-b:a', '128k',
+        '-t', String(videoDuration),
+        '-movflags', '+faststart', outputPath,
+      ];
+    } else {
+      // Audio LONGER বা equal → cut করো video duration এ
+      jobLog.info(`✂️ Audio longer/equal — cutting at ${videoDuration.toFixed(1)}s`);
+      ffmpegArgs = [
+        '-i', inputPath, '-i', audioFile,
+        '-map', '0:v', '-map', '1:a',
+        '-c:v', 'copy', '-c:a', 'aac', '-b:a', '128k',
+        '-shortest', '-movflags', '+faststart', outputPath,
+      ];
+    }
+
+    await runFFmpeg(ffmpegArgs, jobLog, null);
     return;
   }
 
