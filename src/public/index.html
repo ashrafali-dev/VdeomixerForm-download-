@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VideoMixer</title>
+<style>
+:root {
+  --bg: #0a0a0f;
+  --surface: #13131a;
+  --surface2: #1c1c26;
+  --border: #2a2a3a;
+  --accent: #7c3aed;
+  --accent2: #a855f7;
+  --green: #22c55e;
+  --red: #ef4444;
+  --yellow: #eab308;
+  --text: #e2e8f0;
+  --muted: #64748b;
+  --radius: 12px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; min-height: 100vh; }
+
+/* ── Nav ── */
+.nav { display: flex; align-items: center; gap: 0; background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 16px; overflow-x: auto; }
+.nav-brand { font-size: 18px; font-weight: 700; color: var(--accent2); padding: 14px 16px 14px 0; white-space: nowrap; letter-spacing: -0.5px; }
+.nav-brand span { color: var(--text); }
+.tab { padding: 14px 16px; font-size: 13px; font-weight: 500; color: var(--muted); border: none; background: none; cursor: pointer; border-bottom: 2px solid transparent; white-space: nowrap; transition: all .2s; }
+.tab:hover { color: var(--text); }
+.tab.active { color: var(--accent2); border-bottom-color: var(--accent2); }
+
+/* ── Pages ── */
+.page { display: none; padding: 16px; max-width: 800px; margin: 0 auto; }
+.page.active { display: block; }
+
+/* ── Cards ── */
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; margin-bottom: 12px; }
+.card-title { font-size: 13px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 12px; }
+
+/* ── Inputs ── */
+label { font-size: 13px; color: var(--muted); display: block; margin-bottom: 4px; }
+input[type=text], input[type=url], input[type=password], textarea, select {
+  width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+  color: var(--text); padding: 10px 12px; font-size: 14px; outline: none; transition: border .2s;
+}
+input:focus, textarea:focus, select:focus { border-color: var(--accent); }
+textarea { resize: vertical; min-height: 70px; }
+
+/* ── Source boxes ── */
+.sources-list { display: flex; flex-direction: column; gap: 8px; }
+.source-row { display: flex; gap: 8px; align-items: center; background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; }
+.source-row .platform-icon { font-size: 20px; flex-shrink: 0; }
+.source-row input { flex: 1; background: transparent; border: none; padding: 0; font-size: 14px; }
+.source-row input:focus { border: none; box-shadow: none; }
+.source-row .clip-toggle { font-size: 11px; color: var(--muted); cursor: pointer; padding: 4px 8px; border: 1px solid var(--border); border-radius: 6px; background: none; white-space: nowrap; }
+.source-row .clip-toggle:hover { color: var(--accent2); border-color: var(--accent); }
+.source-row .remove-btn { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 18px; line-height: 1; padding: 0 4px; }
+.source-row .remove-btn:hover { color: var(--red); }
+.clip-times { display: none; gap: 8px; padding: 8px 12px 4px; }
+.clip-times.show { display: flex; }
+.clip-times input { flex: 1; font-size: 13px; }
+
+.add-source-btn { width: 100%; background: var(--surface2); border: 1px dashed var(--border); border-radius: 10px; color: var(--muted); padding: 12px; font-size: 14px; cursor: pointer; transition: all .2s; }
+.add-source-btn:hover { border-color: var(--accent); color: var(--accent2); }
+
+/* ── Radio group ── */
+.radio-group { display: flex; flex-direction: column; gap: 8px; }
+.radio-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; cursor: pointer; transition: border .2s; }
+.radio-row:has(input:checked) { border-color: var(--accent); background: #7c3aed11; }
+.radio-row input[type=radio] { accent-color: var(--accent2); }
+.radio-row .label { font-size: 14px; flex: 1; }
+.radio-row .sub { font-size: 12px; color: var(--muted); }
+
+/* ── Buttons ── */
+.btn { display: inline-flex; align-items: center; gap: 6px; padding: 10px 18px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; border: none; transition: all .2s; }
+.btn-primary { background: var(--accent); color: white; }
+.btn-primary:hover { background: var(--accent2); }
+.btn-primary:disabled { background: var(--border); color: var(--muted); cursor: not-allowed; }
+.btn-outline { background: none; border: 1px solid var(--border); color: var(--text); }
+.btn-outline:hover { border-color: var(--accent); color: var(--accent2); }
+.btn-green { background: #16a34a; color: white; }
+.btn-green:hover { background: var(--green); }
+.btn-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+
+/* ── Progress / Log ── */
+.status-bar { display: none; background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 12px; margin-top: 12px; }
+.status-bar.show { display: block; }
+.status-title { font-size: 13px; font-weight: 600; color: var(--accent2); margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+.spin { display: inline-block; animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.log-box { background: #000; border-radius: 8px; padding: 10px; font-family: 'Courier New', monospace; font-size: 11px; height: 200px; overflow-y: auto; }
+.log-line { margin: 1px 0; }
+.log-line.info  { color: #94a3b8; }
+.log-line.warn  { color: #fbbf24; }
+.log-line.error { color: #f87171; }
+.log-line.ok    { color: #4ade80; }
+
+/* ── Result card ── */
+.result-card { display: none; background: #052e16; border: 1px solid #16a34a; border-radius: 10px; padding: 14px; margin-top: 12px; }
+.result-card.show { display: block; }
+.result-title { color: var(--green); font-weight: 700; font-size: 15px; margin-bottom: 10px; }
+.result-info { font-size: 13px; color: var(--muted); margin-bottom: 12px; }
+
+/* ── Settings ── */
+.settings-group { display: flex; flex-direction: column; gap: 12px; }
+.settings-row { display: flex; flex-direction: column; gap: 4px; }
+.save-indicator { font-size: 12px; color: var(--green); display: none; }
+.save-indicator.show { display: inline; }
+
+/* ── Badge ── */
+.badge { display: inline-block; font-size: 10px; padding: 2px 7px; border-radius: 20px; font-weight: 600; }
+.badge-green { background: #14532d; color: #4ade80; }
+.badge-red   { background: #450a0a; color: #fca5a5; }
+.badge-yellow{ background: #422006; color: #fcd34d; }
+
+/* ── Version grid ── */
+.version-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.version-item { background: var(--surface2); border-radius: 8px; padding: 10px 12px; }
+.version-item .name { font-size: 11px; color: var(--muted); }
+.version-item .val  { font-size: 13px; font-weight: 600; margin-top: 2px; }
+</style>
+</head>
+<body>
+
+<!-- Nav -->
+<nav class="nav">
+  <div class="nav-brand">🎬 Video<span>Mixer</span></div>
+  <button class="tab active" onclick="showPage('mixer')">Mixer</button>
+  <button class="tab" onclick="showPage('settings')">Settings</button>
+  <button class="tab" onclick="showPage('system')">System</button>
+</nav>
+
+<!-- ═══ MIXER PAGE ═══ -->
+<div class="page active" id="page-mixer">
+
+  <!-- Source videos -->
+  <div class="card">
+    <div class="card-title">📥 Source Videos</div>
+    <div class="sources-list" id="sourcesList"></div>
+    <button class="add-source-btn" onclick="addSource()">＋ Add video URL</button>
+  </div>
+
+  <!-- Heading -->
+  <div class="card">
+    <div class="card-title">📝 Heading Text (optional)</div>
+    <div style="display:flex;gap:8px;margin-bottom:8px">
+      <input type="text" id="headingText" placeholder='e.g. "Wait until end..." or leave empty' style="flex:1">
+      <select id="headingPos" style="width:110px">
+        <option value="top">Top</option>
+        <option value="center">Center</option>
+        <option value="bottom">Bottom</option>
+      </select>
+    </div>
+    <div style="font-size:12px;color:var(--muted)">White bold text overlay — same style as viral YouTube Shorts</div>
+  </div>
+
+  <!-- Audio -->
+  <div class="card">
+    <div class="card-title">🎵 Audio</div>
+    <div class="radio-group">
+      <label class="radio-row">
+        <input type="radio" name="audio" value="original" checked>
+        <div class="label">Original audio <span class="sub">Keep each video's own audio</span></div>
+      </label>
+      <label class="radio-row">
+        <input type="radio" name="audio" value="mute">
+        <div class="label">Mute all <span class="sub">Remove all audio</span></div>
+      </label>
+      <label class="radio-row" onclick="document.getElementById('audioUrlWrap').style.display='block'">
+        <input type="radio" name="audio" value="audio_url" id="radioAudioUrl">
+        <div class="label">Mute + custom audio <span class="sub">From YouTube / any link — loops if shorter</span></div>
+      </label>
+    </div>
+    <div id="audioUrlWrap" style="display:none;margin-top:8px">
+      <input type="url" id="audioUrl" placeholder="https://youtu.be/... or any video/audio URL">
+    </div>
+  </div>
+
+  <!-- Start button -->
+  <button class="btn btn-primary" id="startBtn" onclick="startJob()" style="width:100%;justify-content:center;padding:14px;font-size:16px">
+    ▶ Start Processing
+  </button>
+
+  <!-- Status -->
+  <div class="status-bar" id="statusBar">
+    <div class="status-title">
+      <span class="spin" id="spinIcon">⚙</span>
+      <span id="statusText">Processing...</span>
+    </div>
+    <div class="log-box" id="logBox"></div>
+  </div>
+
+  <!-- Result -->
+  <div class="result-card" id="resultCard">
+    <div class="result-title">✅ Done!</div>
+    <div class="result-info" id="resultInfo"></div>
+    <div class="btn-row">
+      <a class="btn btn-outline" id="downloadBtn" href="#" download>⬇ Download</a>
+      <button class="btn btn-green" id="ytUploadBtn" onclick="uploadYT()">▶ Upload to YouTube</button>
+      <button class="btn btn-outline" id="driveBtn" onclick="uploadDrive()">📂 Google Drive</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ SETTINGS PAGE ═══ -->
+<div class="page" id="page-settings">
+
+  <div class="card">
+    <div class="card-title">🍪 Cookies (YouTube / TikTok / Instagram)</div>
+    <div class="settings-row">
+      <label>cookies.txt content (Netscape format)</label>
+      <textarea id="setCookies" rows="6" placeholder="# Netscape HTTP Cookie File&#10;.youtube.com	TRUE	/ ..."></textarea>
+    </div>
+    <button class="btn btn-primary" onclick="saveCookies()" style="margin-top:8px">Save Cookies</button>
+    <span class="save-indicator" id="cookiesSaved">✓ Saved</span>
+  </div>
+
+  <div class="card">
+    <div class="card-title">🎬 Kuaishou Cookies (KS_COOKIES)</div>
+    <div class="settings-row">
+      <label>Paste your Kuaishou browser cookie string</label>
+      <textarea id="ksCookies" rows="3" placeholder="kpf=PC_WEB; clientid=3; did=web_xxx; kwssectoken=xxx..."></textarea>
+    </div>
+    <button class="btn btn-primary" onclick="saveKsCookies()" style="margin-top:8px">Save KS Cookies</button>
+    <span class="save-indicator" id="ksCookiesSaved">✓ Saved</span>
+  </div>
+
+  <div class="card">
+    <div class="card-title">🔗 Proxy / Xray</div>
+    <div class="settings-group">
+      <div class="settings-row">
+        <label>YTDLP_PROXY (e.g. socks5://127.0.0.1:1080)</label>
+        <input type="text" id="setProxy" placeholder="socks5://127.0.0.1:1080">
+      </div>
+      <div class="settings-row">
+        <label>VMess / VLess / Trojan link</label>
+        <input type="text" id="setVmess" placeholder="vmess://eyJ...">
+      </div>
+    </div>
+    <button class="btn btn-primary" onclick="saveProxy()" style="margin-top:12px">Save Proxy</button>
+    <span class="save-indicator" id="proxySaved">✓ Saved</span>
+  </div>
+
+  <div class="card">
+    <div class="card-title">🔑 Google OAuth (YouTube / Drive)</div>
+    <div class="settings-group">
+      <div class="settings-row">
+        <label>GOOGLE_CLIENT_ID</label>
+        <input type="text" id="setGClientId" placeholder="xxx.apps.googleusercontent.com">
+      </div>
+      <div class="settings-row">
+        <label>GOOGLE_CLIENT_SECRET</label>
+        <input type="password" id="setGClientSecret" placeholder="GOCSPX-...">
+      </div>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-primary" onclick="saveGoogle()">Save Google OAuth</button>
+      <a class="btn btn-outline" href="/auth/google" id="googleAuthBtn">Connect Google Account</a>
+    </div>
+    <span class="save-indicator" id="googleSaved">✓ Saved</span>
+  </div>
+
+</div>
+
+<!-- ═══ SYSTEM PAGE ═══ -->
+<div class="page" id="page-system">
+  <div class="card">
+    <div class="card-title" style="display:flex;justify-content:space-between;align-items:center">
+      System Status
+      <button class="btn btn-outline" onclick="loadVersion()" style="padding:4px 10px;font-size:12px">Refresh</button>
+    </div>
+    <div class="version-grid" id="versionGrid">
+      <div style="color:var(--muted);font-size:13px;grid-column:span 2">Loading...</div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─── Navigation ───────────────────────────────────────────────────
+function showPage(name) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+  event.target.classList.add('active');
+  if (name === 'system') loadVersion();
+}
+
+// ─── Source management ─────────────────────────────────────────────
+let sourceCount = 0;
+
+function getPlatformIcon(url) {
+  if (/instagram/.test(url))            return '📸';
+  if (/tiktok|vm\.tiktok/.test(url))    return '🎵';
+  if (/kuaishou|ks\.com/.test(url))     return '🎬';
+  if (/youtube|youtu\.be/.test(url))    return '▶️';
+  return '🔗';
+}
+
+function addSource(url = '') {
+  sourceCount++;
+  const id = 'src_' + sourceCount;
+  const div = document.createElement('div');
+  div.id = id;
+  div.innerHTML = `
+    <div class="source-row">
+      <span class="platform-icon" id="${id}_icon">${getPlatformIcon(url)}</span>
+      <input type="url" placeholder="YouTube / Instagram / TikTok / Kuaishou URL"
+        value="${url}" oninput="updateIcon('${id}', this.value)" />
+      <button class="clip-toggle" onclick="toggleClip('${id}')">✂ Clip</button>
+      <button class="remove-btn" onclick="removeSource('${id}')">×</button>
+    </div>
+    <div class="clip-times" id="${id}_clip">
+      <input type="text" placeholder="Start  00:01:30" id="${id}_start">
+      <input type="text" placeholder="End  00:02:45" id="${id}_end">
+    </div>
+  `;
+  document.getElementById('sourcesList').appendChild(div);
+}
+
+function removeSource(id) {
+  const el = document.getElementById(id);
+  if (el) el.remove();
+}
+
+function updateIcon(id, url) {
+  document.getElementById(id + '_icon').textContent = getPlatformIcon(url);
+}
+
+function toggleClip(id) {
+  const el = document.getElementById(id + '_clip');
+  el.classList.toggle('show');
+}
+
+// Add 2 sources by default
+addSource(); addSource();
+
+// ─── Audio radio toggle ───────────────────────────────────────────
+document.querySelectorAll('input[name=audio]').forEach(r => {
+  r.addEventListener('change', () => {
+    document.getElementById('audioUrlWrap').style.display =
+      r.value === 'audio_url' ? 'block' : 'none';
+  });
+});
+
+// ─── Start job ────────────────────────────────────────────────────
+let currentJobId = null;
+
+async function startJob() {
+  // Collect sources
+  const sources = [];
+  document.querySelectorAll('#sourcesList > div').forEach(row => {
+    const id   = row.id;
+    const url  = row.querySelector('input[type=url]')?.value?.trim();
+    if (!url) return;
+    const startEl = document.getElementById(id + '_start');
+    const endEl   = document.getElementById(id + '_end');
+    const src = { url };
+    if (startEl?.value && endEl?.value) {
+      src.startTime = startEl.value.trim();
+      src.endTime   = endEl.value.trim();
+    }
+    sources.push(src);
+  });
+
+  if (sources.length === 0) return alert('Add at least one video URL');
+
+  const headingText = document.getElementById('headingText').value.trim();
+  const headingPos  = document.getElementById('headingPos').value;
+  const audioMode   = document.querySelector('input[name=audio]:checked').value;
+  const audioUrl    = document.getElementById('audioUrl').value.trim();
+
+  const payload = {
+    sources,
+    heading: headingText ? { text: headingText, position: headingPos } : null,
+    audioOpts: { mode: audioMode, audioUrl: audioUrl || null },
+  };
+
+  // UI
+  const btn = document.getElementById('startBtn');
+  btn.disabled = true; btn.textContent = '⚙ Processing...';
+  document.getElementById('statusBar').classList.add('show');
+  document.getElementById('resultCard').classList.remove('show');
+  document.getElementById('logBox').innerHTML = '';
+  document.getElementById('spinIcon').style.display = 'inline-block';
+  document.getElementById('statusText').textContent = 'Starting...';
+
+  try {
+    const res = await fetch('/api/mixer/jobs', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!data.jobId) throw new Error(data.error || 'No jobId returned');
+    currentJobId = data.jobId;
+    streamLogs(currentJobId);
+  } catch (e) {
+    document.getElementById('statusText').textContent = '❌ ' + e.message;
+    btn.disabled = false; btn.textContent = '▶ Start Processing';
+  }
+}
+
+function streamLogs(jobId) {
+  const logBox = document.getElementById('logBox');
+  const es = new EventSource(`/api/mixer/jobs/${jobId}/stream`);
+
+  es.onmessage = e => {
+    const data = JSON.parse(e.data);
+
+    if (data.type === 'status') {
+      document.getElementById('statusText').textContent =
+        data.status === 'downloading' ? '📥 Downloading...' :
+        data.status === 'merging'     ? '🎬 Merging...' :
+        data.status === 'done'        ? '✅ Done!' :
+        '❌ Error';
+      if (data.status === 'done' || data.status === 'error') {
+        document.getElementById('spinIcon').style.display = 'none';
+        document.getElementById('startBtn').disabled = false;
+        document.getElementById('startBtn').textContent = '▶ Start Processing';
+        if (data.status === 'done') loadResult(jobId);
+        es.close();
+      }
+      return;
+    }
+    if (data.type === 'close') { es.close(); return; }
+
+    // Log entry
+    const line = document.createElement('div');
+    line.className = 'log-line ' + (data.level || 'info');
+    const msg = data.msg || '';
+    line.textContent = msg.startsWith('✅') ? msg : msg;
+    if (msg.startsWith('✅')) line.className = 'log-line ok';
+    logBox.appendChild(line);
+    logBox.scrollTop = logBox.scrollHeight;
+  };
+
+  es.onerror = () => {
+    es.close();
+    document.getElementById('startBtn').disabled = false;
+    document.getElementById('startBtn').textContent = '▶ Start Processing';
+  };
+}
+
+async function loadResult(jobId) {
+  const res  = await fetch(`/api/mixer/jobs/${jobId}`);
+  const job  = await res.json();
+  if (job.status !== 'done' || !job.result) return;
+
+  const r   = job.result;
+  const mb  = (r.sizeBytes / 1024 / 1024).toFixed(2);
+  document.getElementById('resultInfo').textContent = `${r.fileName}  •  ${mb} MB`;
+  document.getElementById('downloadBtn').href = `/files/${encodeURIComponent(r.fileName)}`;
+  document.getElementById('downloadBtn').download = r.fileName;
+  document.getElementById('resultCard').classList.add('show');
+}
+
+async function uploadYT() {
+  if (!currentJobId) return;
+  const res  = await fetch(`/api/mixer/jobs/${currentJobId}`);
+  const job  = await res.json();
+  if (!job.result) return alert('No result yet');
+  alert('YouTube upload — configure OAuth in Settings tab first, then this will work.');
+}
+
+async function uploadDrive() {
+  if (!currentJobId) return;
+  alert('Google Drive upload — configure OAuth in Settings tab.');
+}
+
+// ─── Settings ─────────────────────────────────────────────────────
+async function saveConfig(data, indicatorId) {
+  await fetch('/api/setup/config', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  const el = document.getElementById(indicatorId);
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 2000);
+}
+
+async function saveCookies() {
+  const val = document.getElementById('setCookies').value.trim();
+  await fetch('/api/setup/cookies', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ cookies: val }),
+  });
+  document.getElementById('cookiesSaved').classList.add('show');
+  setTimeout(() => document.getElementById('cookiesSaved').classList.remove('show'), 2000);
+}
+
+async function saveKsCookies() {
+  await saveConfig({ KS_COOKIES: document.getElementById('ksCookies').value.trim() }, 'ksCookiesSaved');
+}
+
+async function saveProxy() {
+  await saveConfig({
+    YTDLP_PROXY: document.getElementById('setProxy').value.trim(),
+    VMESS_LINK:  document.getElementById('setVmess').value.trim(),
+  }, 'proxySaved');
+}
+
+async function saveGoogle() {
+  await saveConfig({
+    GOOGLE_CLIENT_ID:     document.getElementById('setGClientId').value.trim(),
+    GOOGLE_CLIENT_SECRET: document.getElementById('setGClientSecret').value.trim(),
+  }, 'googleSaved');
+}
+
+// ─── Version / System ─────────────────────────────────────────────
+async function loadVersion() {
+  const grid = document.getElementById('versionGrid');
+  grid.innerHTML = '<div style="color:var(--muted);font-size:13px;grid-column:span 2">Loading...</div>';
+  try {
+    const v = await (await fetch('/version')).json();
+    const items = [
+      ['ffmpeg',      v.ffmpeg?.split(' ').slice(0,3).join(' ') || 'n/a'],
+      ['yt-dlp',      v.ytdlp      || 'n/a'],
+      ['Deno',        v.deno?.split('\n')[0] || 'n/a'],
+      ['Xray',        v.xray       || 'n/a'],
+      ['Instaloader', v.instaloader|| 'n/a'],
+      ['Node.js',     v.node       || 'n/a'],
+      ['Cookies',     v.cookies    ? '✓ Present' : '✗ Missing'],
+      ['KS Cookies',  v.ks_cookies ? '✓ Set' : '✗ Not set'],
+      ['Proxy',       v.proxy      ? '✓ Configured' : '✗ None'],
+      ['VMess',       v.vmess      ? '✓ Set' : '✗ None'],
+      ['Google OAuth',v.google_oauth ? '✓ Set' : '✗ Not set'],
+    ];
+    grid.innerHTML = items.map(([name, val]) => `
+      <div class="version-item">
+        <div class="name">${name}</div>
+        <div class="val" style="color:${val.startsWith('✓') ? 'var(--green)' : val.startsWith('✗') ? 'var(--red)' : 'var(--text)'}">
+          ${val}
+        </div>
+      </div>
+    `).join('');
+  } catch (e) {
+    grid.innerHTML = `<div style="color:var(--red);grid-column:span 2">Failed to load: ${e.message}</div>`;
+  }
+}
+</script>
+</body>
+</html>
