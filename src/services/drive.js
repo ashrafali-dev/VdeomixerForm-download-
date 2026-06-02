@@ -1,76 +1,46 @@
 'use strict';
-
-const fs = require('fs');
-const path = require('path');
-const { google } = require('googleapis');
+const router  = require('express').Router();
+const path    = require('path');
+const fs      = require('fs');
+const { uploadFile, extractFolderId } = require('../services/drive');
+const { getJob } = require('../services/jobManager');
 const { logger } = require('../utils/logger');
 
-const SCOPES = ['https://www.googleapis.com/auth/drive.file'];
+const OUTPUT_DIR = process.env.OUTPUT_DIR || '/app/data/output';
 
-function makeOAuth2Client() {
-  return new google.auth.OAuth2(
-    process.env.GOOGLE_CLIENT_ID,
-    process.env.GOOGLE_CLIENT_SECRET,
-    process.env.GOOGLE_REDIRECT_URI
-  );
+function requireAuth(req, res, next) {
+  if (!req.session.googleTokens)
+    return res.status(401).json({ error: 'Not authenticated. Go to /auth/google first.' });
+  next();
 }
 
-function getAuthUrl() {
-  const oAuth2 = makeOAuth2Client();
-  return oAuth2.generateAuthUrl({
-    access_type: 'offline',
-    prompt: 'consent',
-    scope: SCOPES,
-  });
-}
+router.post('/upload', requireAuth, async (req, res) => {
+  try {
+    const { jobId, folderUrl } = req.body || {};
+    if (!jobId)     return res.status(400).json({ error: 'jobId required' });
+    if (!folderUrl) return res.status(400).json({ error: 'folderUrl required' });
 
-async function exchangeCode(code) {
-  const oAuth2 = makeOAuth2Client();
-  const { tokens } = await oAuth2.getToken(code);
-  return tokens;
-}
+    const folderId = extractFolderId(folderUrl);
+    if (!folderId) return res.status(400).json({ error: 'Cannot parse Drive folder ID from URL' });
 
-function clientFromTokens(tokens) {
-  const o = makeOAuth2Client();
-  o.setCredentials(tokens);
-  return o;
-}
+    const job = getJob(jobId);
+    if (!job)   return res.status(404).json({ error: 'Job not found' });
+    if (job.status !== 'done' || !job.result)
+      return res.status(400).json({ error: 'Job not done yet' });
 
-function extractFolderId(input) {
-  if (!input) return null;
-  const m = String(input).match(/folders\/([A-Za-z0-9_\-]+)/);
-  if (m) return m[1];
-  if (/^[A-Za-z0-9_\-]{10,}$/.test(input)) return input;
-  return null;
-}
+    const filePath = job.result.filePath;
+    const fileName = job.result.fileName;
 
-/**
- * Upload to Drive.
- *  - displayName  → file name visible in Drive (acts as caption)
- *  - description  → Drive file description (extra metadata)
- */
-async function uploadFile(tokens, filePath, folderId, displayName, description) {
-  const auth = clientFromTokens(tokens);
-  const drive = google.drive({ version: 'v3', auth });
+    if (!fs.existsSync(filePath))
+      return res.status(404).json({ error: 'Output file not found on disk' });
 
-  const fileMetadata = {
-    name: displayName || path.basename(filePath),
-    parents: folderId ? [folderId] : undefined,
-  };
-  if (description) fileMetadata.description = description;
+    const r = await uploadFile(req.session.googleTokens, filePath, folderId, fileName, '');
+    res.json({ ok: true, id: r.id, name: r.name, link: r.webViewLink });
 
-  const media = {
-    mimeType: 'video/mp4',
-    body: fs.createReadStream(filePath),
-  };
-  const res = await drive.files.create({
-    requestBody: fileMetadata,
-    media,
-    fields: 'id, name, webViewLink',
-    supportsAllDrives: true,
-  });
-  logger.info(`Uploaded to Drive: ${res.data.name} (${res.data.id})`);
-  return res.data;
-}
+  } catch (e) {
+    logger.error('Drive upload error:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
 
-module.exports = { getAuthUrl, exchangeCode, uploadFile, extractFolderId, SCOPES };
+module.exports = router;
