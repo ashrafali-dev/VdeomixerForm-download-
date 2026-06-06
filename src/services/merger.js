@@ -801,6 +801,7 @@ async function extractThumbnail(videoPath, outJpg, jobLog) {
       '-i', videoPath,
       '-vframes', '1',
       '-vf', `scale=${Math.round(VIDEO_W * 0.22)}:-1`,
+      '-update', '1',
       '-q:v', '3',
       outJpg,
     ], jobLog, null);
