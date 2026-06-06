@@ -35,8 +35,7 @@ function runFFmpeg(args, jobLog, jobId, onProgress) {
   return new Promise((resolve, reject) => {
     const proc = spawn('ffmpeg', ['-y', ...args], { stdio: ['ignore', 'pipe', 'pipe'] });
     let stderr = '';
-    proc.stdout.on('data', d => d.toString().split(/\r?\n/).forEach(l => l && jobLog.info(`ffmpeg> ${l}`)));
-    proc.stderr.on('data', d => {
+    proc.stdout.on('data', d => d.toString().split(/\r?\n/).forEach(l => l && jobLog.info('ffmpeg> ' + l)));    proc.stderr.on('data', d => {
       const t = d.toString(); stderr += t;
       t.split(/\r?\n/).forEach(l => {
         if (!l) return;
