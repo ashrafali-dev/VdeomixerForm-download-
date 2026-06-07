@@ -1,1 +1,1309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VideoMixer</title>
+<style>
+@font-face { font-family: 'NotoSansBengali'; src: url('/fonts/NotoSansBengali-Regular.ttf'); font-weight: 400; }
+@font-face { font-family: 'NotoSansBengali'; src: url('/fonts/NotoSansBengali-Bold.ttf'); font-weight: 700; }
+@font-face { font-family: 'HindSiliguri'; src: url('/fonts/HindSiliguri-Regular.ttf'); font-weight: 400; }
+@font-face { font-family: 'HindSiliguri'; src: url('/fonts/HindSiliguri-Bold.ttf'); font-weight: 700; }
+:root {
+  --bg: #0a0a0f; --surface: #13131a; --surface2: #1c1c26;
+  --border: #2a2a3a; --accent: #7c3aed; --accent2: #a855f7;
+  --green: #22c55e; --red: #ef4444; --yellow: #eab308;
+  --text: #e2e8f0; --muted: #64748b; --radius: 12px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { max-width: 100%; overflow-x: hidden; }
+body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', 'NotoSansBengali', 'HindSiliguri', 'Noto Color Emoji', system-ui, sans-serif; min-height: 100vh; }
+.nav { display: flex; align-items: center; background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 12px; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.nav-brand { font-size: 17px; font-weight: 700; color: var(--accent2); padding: 14px 12px 14px 0; white-space: nowrap; }
+.nav-brand span { color: var(--text); }
+.tab { padding: 14px 14px; font-size: 13px; font-weight: 500; color: var(--muted); border: none; background: none; cursor: pointer; border-bottom: 2px solid transparent; white-space: nowrap; transition: all .2s; }
+.tab:hover { color: var(--text); }
+.tab.active { color: var(--accent2); border-bottom-color: var(--accent2); }
+.page { display: none; padding: 12px; max-width: 800px; margin: 0 auto; }
+.page.active { display: block; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; margin-bottom: 12px; }
+.card-title { font-size: 13px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 12px; }
+label { font-size: 13px; color: var(--muted); display: block; margin-bottom: 4px; }
+input[type=text], input[type=url], input[type=password], textarea, select {
+  width: 100%; max-width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+  color: var(--text); padding: 10px 12px; font-size: 14px; outline: none; transition: border .2s;
+}
+input:focus, textarea:focus, select:focus { border-color: var(--accent); }
+textarea { resize: vertical; min-height: 70px; }
 
+/* ── Source rows ── */
+.source-wrap { background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+.source-row { display: flex; gap: 8px; align-items: center; padding: 10px 12px; min-width: 0; }
+.source-row .platform-icon { font-size: 20px; flex-shrink: 0; }
+.source-row input { flex: 1; min-width: 0; background: transparent; border: none; padding: 0; font-size: 14px; }
+.source-row input:focus { border: none; box-shadow: none; }
+.source-row .remove-btn { flex-shrink: 0; }
+
+.source-meta { display: flex; gap: 6px; align-items: center; padding: 0 12px 10px; flex-wrap: wrap; }
+.source-title-row { padding: 0 12px 10px; }
+.source-title-row input { width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; color: var(--text); padding: 9px 11px; font-size: 13px; }
+.rank-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.rank-note { font-size: 12px; color: var(--muted); margin-top: 8px; line-height: 1.5; }
+.clip-toggle {
+  font-size: 12px; color: var(--muted); cursor: pointer;
+  padding: 5px 10px; border: 1px solid var(--border); border-radius: 6px;
+  background: none; white-space: nowrap; display: inline-flex; align-items: center; gap: 4px;
+}
+.clip-toggle:hover, .clip-toggle.active { color: var(--accent2); border-color: var(--accent); background: #7c3aed11; }
+.duration-badge { font-size: 11px; color: var(--accent2); background: #7c3aed22; border: 1px solid #7c3aed44; border-radius: 6px; padding: 3px 8px; white-space: nowrap; flex-shrink: 0; }
+
+.remove-btn { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 22px; line-height: 1; padding: 0 4px; }
+.remove-btn:hover { color: var(--red); }
+
+/* ── Expanded clip controls (Start/End/Speed all here) ── */
+.clip-panel {
+  display: none; padding: 10px 12px 12px;
+  border-top: 1px dashed var(--border); background: #0f0f17;
+}
+.clip-panel.show { display: block; }
+.clip-panel-row {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px;
+}
+.clip-panel-row .field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.clip-panel-row .field label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin: 0; }
+.clip-panel-row input {
+  width: 100%; font-size: 13px; padding: 8px 10px;
+  background: var(--bg); border: 1px solid var(--border); border-radius: 7px; color: var(--text);
+}
+.clip-panel-speed { display: flex; align-items: center; gap: 8px; }
+.clip-panel-speed label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin: 0; flex-shrink: 0; }
+.clip-panel-speed select {
+  flex: 1; font-size: 13px; padding: 8px 10px;
+  background: var(--bg); border: 1px solid var(--border); border-radius: 7px; color: var(--text);
+  cursor: pointer;
+}
+
+/* ── Add source ── */
+.add-source-btn {
+  width: 100%; background: var(--surface2); border: 1px dashed var(--border); border-radius: 10px;
+  color: var(--muted); padding: 12px; font-size: 14px; cursor: pointer; transition: all .2s; margin-top: 8px;
+}
+.add-source-btn:hover { border-color: var(--accent); color: var(--accent2); }
+
+/* ── Radio ── */
+.radio-group { display: flex; flex-direction: column; gap: 8px; }
+.radio-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; cursor: pointer; transition: border .2s; }
+.radio-row:has(input:checked) { border-color: var(--accent); background: #7c3aed11; }
+.radio-row input[type=radio] { accent-color: var(--accent2); flex-shrink: 0; }
+.radio-row .rlabel { font-size: 14px; flex: 1; min-width: 0; }
+.radio-row .sub { font-size: 12px; color: var(--muted); display: block; }
+
+/* ── Buttons ── */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 10px 16px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; border: none; transition: all .2s; white-space: nowrap; }
+.btn-primary { background: var(--accent); color: white; }
+.btn-primary:hover { background: var(--accent2); }
+.btn-primary:disabled { background: var(--border); color: var(--muted); cursor: not-allowed; }
+.btn-outline { background: none; border: 1px solid var(--border); color: var(--text); }
+.btn-outline:hover { border-color: var(--accent); color: var(--accent2); }
+.btn-green { background: #16a34a; color: white; }
+.btn-green:hover { background: var(--green); }
+.btn-red { background: #991b1b; color: white; }
+.btn-red:hover { background: var(--red); }
+.btn-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+
+/* ── Status / Logs ── */
+.status-bar { display: none; background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 12px; margin-top: 12px; }
+.status-bar.show { display: block; }
+.status-title { font-size: 13px; font-weight: 600; color: var(--accent2); margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+.spin { display: inline-block; animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.log-box { background: #000; border-radius: 8px; padding: 10px; font-family: 'Courier New', monospace; font-size: 11px; height: 180px; overflow-y: auto; word-break: break-all; }
+.log-line { margin: 1px 0; }
+.log-line.info  { color: #94a3b8; }
+.log-line.warn  { color: #fbbf24; }
+.log-line.error { color: #f87171; }
+.log-line.ok    { color: #4ade80; }
+
+/* ── Result card ── */
+.result-card { display: none; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); margin-top: 12px; overflow: hidden; }
+.result-card.show { display: block; }
+.result-header { background: #052e16; border-bottom: 1px solid #16a34a; padding: 12px 16px; }
+.result-title { color: var(--green); font-weight: 700; font-size: 15px; }
+.result-info { font-size: 12px; color: var(--muted); margin-top: 4px; word-break: break-all; }
+
+.video-preview-wrap { background: #000; display: flex; justify-content: center; align-items: center; max-height: 420px; }
+.video-preview-wrap video { max-width: 100%; max-height: 420px; display: block; }
+
+/* ── Voiceover ── */
+.voiceover-section { padding: 14px 16px; border-top: 1px solid var(--border); }
+.voiceover-title { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 10px; }
+.recorder-ui { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.rec-btn { display: flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; border: none; }
+.rec-btn-start { background: var(--red); color: white; }
+.rec-btn-start:hover { background: #dc2626; }
+.rec-btn-stop  { background: #374151; color: white; }
+.rec-btn-stop:hover { background: #4b5563; }
+.rec-status { font-size: 12px; color: var(--muted); }
+.rec-status.recording { color: var(--red); animation: blink 1s infinite; }
+@keyframes blink { 50% { opacity: 0.4; } }
+.rec-timer { font-size: 13px; font-weight: 700; font-family: monospace; color: var(--text); min-width: 50px; }
+.audio-preview { width: 100%; margin-top: 8px; border-radius: 6px; }
+.apply-vo-btn { display: none; }
+.apply-vo-btn.show { display: flex; }
+
+.result-actions { padding: 12px 16px; border-top: 1px solid var(--border); display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* ── Settings ── */
+.settings-row { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
+.save-indicator { font-size: 12px; color: var(--green); display: none; margin-left: 8px; }
+.save-indicator.show { display: inline; }
+.version-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.version-item { background: var(--surface2); border-radius: 8px; padding: 10px 12px; min-width: 0; }
+.version-item .name { font-size: 11px; color: var(--muted); }
+.version-item .val  { font-size: 13px; font-weight: 600; margin-top: 2px; word-break: break-word; }
+
+/* ── Audio library ── */
+.audio-lib-item { display: flex; align-items: center; gap: 8px; background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; margin-bottom: 6px; min-width: 0; }
+.audio-lib-item audio { flex: 1; height: 28px; min-width: 0; }
+.audio-lib-item .use-btn { font-size: 12px; padding: 4px 10px; border-radius: 6px; background: var(--accent); color: white; border: none; cursor: pointer; white-space: nowrap; }
+.audio-lib-item .del-btn { font-size: 18px; background: none; border: none; color: var(--muted); cursor: pointer; flex-shrink: 0; }
+.audio-lib-item .del-btn:hover { color: var(--red); }
+.audio-lib-name { font-size: 12px; color: var(--muted); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+
+/* ── Jobs ── */
+.jobs-list { display: flex; flex-direction: column; gap: 8px; }
+.job-item { background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.job-item .job-info { flex: 1; min-width: 0; }
+.job-item .job-name { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.job-item .job-status { font-size: 11px; padding: 2px 8px; border-radius: 10px; font-weight: 600; flex-shrink: 0; }
+.job-status-done  { background: #052e16; color: var(--green); }
+.job-status-error { background: #450a0a; color: var(--red); }
+.job-status-running { background: #1e1b4b; color: var(--accent2); }
+
+/* ── Heading row ── */
+.heading-row { display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+.heading-row input { flex: 1; min-width: 0; }
+.heading-row select { width: 110px; flex-shrink: 0; }
+
+/* ── Mobile ── */
+@media (max-width: 480px) {
+  .page { padding: 10px; }
+  .card { padding: 12px; }
+  .nav-brand { font-size: 16px; padding-right: 8px; }
+  .tab { padding: 14px 10px; font-size: 12px; }
+  .heading-row select { width: 100%; }
+  .version-grid { grid-template-columns: 1fr; }
+  .clip-panel-row { grid-template-columns: 1fr; }
+  .btn { padding: 10px 14px; font-size: 13px; }
+}
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="nav-brand">🎬 Video<span>Mixer</span></div>
+  <button class="tab active" onclick="showPage('mixer',this)">Mixer</button>
+  <button class="tab" onclick="showPage('jobs',this);loadJobs()">Jobs</button>
+  <button class="tab" onclick="showPage('settings',this)">Settings</button>
+  <button class="tab" onclick="showPage('system',this)">System</button>
+</nav>
+
+<!-- ═══ MIXER PAGE ═══ -->
+<div class="page active" id="page-mixer">
+
+  <div class="card">
+    <div class="card-title">📥 Source Videos</div>
+    <div class="sources-list" id="sourcesList"></div>
+    <button class="add-source-btn" onclick="addSource()">＋ Add video URL</button>
+  </div>
+
+  <div class="card">
+    <div class="card-title">🏆 Ranking Mode</div>
+    <label class="radio-row" style="margin-bottom:10px">
+      <input type="checkbox" id="rankingEnabled">
+      <div class="rlabel">Enable ranking mode <span class="sub">Per-video title + auto rank number overlay</span></div>
+    </label>
+    <div class="rank-grid">
+      <div>
+        <label>Order</label>
+        <select id="rankingDirection">
+          <option value="countdown">Countdown (#N → #1)</option>
+          <option value="normal">Normal (#1 → #N)</option>
+        </select>
+      </div>
+      <div>
+        <label>Overlay Preset</label>
+        <select id="rankingPreset">
+          <option value="left_list">List Style — left numbers + active title</option>
+          <option value="current_badge">Top-left Badge — current rank + title</option>
+          <option value="pro_ranking">⭐ Pro Ranking — thumbnails + badges + zoom</option>
+        </select>
+      </div>
+    </div>
+    <div class="rank-note">সব rank সাদা থাকবে, আর যে clip এখন play হবে সেই current number লাল highlight হবে। প্রতিটা source-এর title URL input-এর নিচে দিন।</div>
+    <div style="margin-top:10px">
+      <label style="font-size:13px;color:#aaa;display:block;margin-bottom:4px">Global Title (টপে বড় হেডিং — যেমন "Ranking Funniest Fails 😂")</label>
+      <input type="text" id="rankingGlobalTitle" placeholder='e.g. Ranking Best|Falling Moments — "|" দিয়ে দুই অংশ আলাদা করো' style="width:100%;padding:8px 10px;background:#1a1a2e;border:1px solid #333;border-radius:8px;color:#fff;font-size:14px">
+      <div style="margin-top:8px">
+        <div style="font-size:11px;color:var(--muted);margin-bottom:6px">🎨 Accent Color — <code style="color:#a78bfa;font-size:10px">|</code> এর পরের অংশ এই রঙে হবে</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+          <button class="gc-swatch" data-color="#22c55e" onclick="setGlobalTitleColor(this,'#22c55e')" style="width:28px;height:28px;border-radius:6px;border:2px solid #fff;background:#22c55e;cursor:pointer"></button>
+          <button class="gc-swatch" data-color="#ef4444" onclick="setGlobalTitleColor(this,'#ef4444')" style="width:28px;height:28px;border-radius:6px;border:2px solid #555;background:#ef4444;cursor:pointer"></button>
+          <button class="gc-swatch" data-color="#06b6d4" onclick="setGlobalTitleColor(this,'#06b6d4')" style="width:28px;height:28px;border-radius:6px;border:2px solid #555;background:#06b6d4;cursor:pointer"></button>
+          <button class="gc-swatch" data-color="#eab308" onclick="setGlobalTitleColor(this,'#eab308')" style="width:28px;height:28px;border-radius:6px;border:2px solid #555;background:#eab308;cursor:pointer"></button>
+          <button class="gc-swatch" data-color="#f97316" onclick="setGlobalTitleColor(this,'#f97316')" style="width:28px;height:28px;border-radius:6px;border:2px solid #555;background:#f97316;cursor:pointer"></button>
+          <button class="gc-swatch" data-color="#ec4899" onclick="setGlobalTitleColor(this,'#ec4899')" style="width:28px;height:28px;border-radius:6px;border:2px solid #555;background:#ec4899;cursor:pointer"></button>
+          <button class="gc-swatch" data-color="#a855f7" onclick="setGlobalTitleColor(this,'#a855f7')" style="width:28px;height:28px;border-radius:6px;border:2px solid #555;background:#a855f7;cursor:pointer"></button>
+          <button class="gc-swatch" data-color="#ffffff" onclick="setGlobalTitleColor(this,'#ffffff')" style="width:28px;height:28px;border-radius:6px;border:2px solid #555;background:#ffffff;cursor:pointer"></button>
+          <input type="color" id="globalTitleColorCustom" value="#22c55e" onchange="setGlobalTitleColorHex(this.value)" title="Custom color" style="width:28px;height:28px;padding:0;border:2px solid #555;background:none;cursor:pointer;border-radius:6px">
+        </div>
+        <input type="hidden" id="globalTitleAccentColor" value="#22c55e">
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">📝 Heading Text (optional)</div>
+    <div class="heading-row">
+      <input type="text" id="headingText" placeholder='"Wait until end..." or leave empty — "|" দিয়ে দুই রং'>
+      <select id="headingPos">
+        <option value="top">Top</option>
+        <option value="center">Center</option>
+        <option value="bottom">Bottom</option>
+      </select>
+      <input type="number" id="headingFontSize" min="24" max="96" value="52" step="1" style="flex:0 0 96px;width:96px" placeholder="52">
+    </div>
+    <div style="margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;color:var(--muted)">
+        <input type="checkbox" id="headingShowBg" checked style="accent-color:var(--accent2)">
+        Background box
+      </label>
+      <span style="font-size:11px;color:#555">| uncheck = transparent</span>
+    </div>
+    <div style="margin-top:8px">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:6px">🎨 Accent Color — <code style="color:#a78bfa;font-size:10px">|</code> এর পরের অংশ এই রঙে হবে</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+        <button class="hc-swatch" data-color="#22c55e" onclick="setHeadingColor(this,'#22c55e')" style="width:26px;height:26px;border-radius:5px;border:2px solid #22c55e;background:#22c55e;cursor:pointer"></button>
+        <button class="hc-swatch" data-color="#ef4444" onclick="setHeadingColor(this,'#ef4444')" style="width:26px;height:26px;border-radius:5px;border:2px solid #555;background:#ef4444;cursor:pointer"></button>
+        <button class="hc-swatch" data-color="#06b6d4" onclick="setHeadingColor(this,'#06b6d4')" style="width:26px;height:26px;border-radius:5px;border:2px solid #555;background:#06b6d4;cursor:pointer"></button>
+        <button class="hc-swatch" data-color="#eab308" onclick="setHeadingColor(this,'#eab308')" style="width:26px;height:26px;border-radius:5px;border:2px solid #555;background:#eab308;cursor:pointer"></button>
+        <button class="hc-swatch" data-color="#f97316" onclick="setHeadingColor(this,'#f97316')" style="width:26px;height:26px;border-radius:5px;border:2px solid #555;background:#f97316;cursor:pointer"></button>
+        <button class="hc-swatch" data-color="#ec4899" onclick="setHeadingColor(this,'#ec4899')" style="width:26px;height:26px;border-radius:5px;border:2px solid #555;background:#ec4899;cursor:pointer"></button>
+        <button class="hc-swatch" data-color="#a855f7" onclick="setHeadingColor(this,'#a855f7')" style="width:26px;height:26px;border-radius:5px;border:2px solid #555;background:#a855f7;cursor:pointer"></button>
+        <input type="color" id="headingColorCustom" value="#22c55e" onchange="setHeadingColorHex(this.value)" style="width:26px;height:26px;padding:0;border:2px solid #555;background:none;cursor:pointer;border-radius:5px">
+      </div>
+      <input type="hidden" id="headingAccentColor" value="#22c55e">
+    </div>
+    <div style="margin-top:8px">
+      <label style="font-size:12px;color:var(--muted);margin-bottom:4px;display:block">🎯 Upload Platform <span style="color:#555;font-weight:400">(safe zone auto-adjust)</span></label>
+      <select id="uploadPlatform" style="width:100%">
+        <option value="youtube">▶️ YouTube Shorts</option>
+        <option value="tiktok">🎵 TikTok</option>
+        <option value="instagram">📸 Instagram Reels</option>
+        <option value="facebook">📘 Facebook Reels</option>
+      </select>
+      <div style="font-size:11px;color:var(--muted);margin-top:4px">Heading position সেই platform-এর UI safe zone অনুযায়ী auto-set হবে।</div>
+    </div>
+    <div style="font-size:12px;color:var(--muted);margin-top:8px">Bengali + emoji safe renderer. Font size adjustable from 24–96.</div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">🎵 Audio</div>
+    <div class="radio-group">
+      <label class="radio-row">
+        <input type="radio" name="audio" value="original" checked>
+        <div class="rlabel">Original audio <span class="sub">Keep each video's audio</span></div>
+      </label>
+      <label class="radio-row">
+        <input type="radio" name="audio" value="mute">
+        <div class="rlabel">Mute all <span class="sub">Remove all audio</span></div>
+      </label>
+      <label class="radio-row">
+        <input type="radio" name="audio" value="audio_url" id="radioAudioUrl">
+        <div class="rlabel">Mute + URL audio <span class="sub">YouTube/any link — loops if shorter, cuts if longer</span></div>
+      </label>
+      <label class="radio-row">
+        <input type="radio" name="audio" value="voiceover" id="radioVoiceover">
+        <div class="rlabel">Mute + Voiceover <span class="sub">Record while watching the final video</span></div>
+      </label>
+    </div>
+    <div id="audioUrlWrap" style="display:none;margin-top:8px">
+      <input type="url" id="audioUrl" placeholder="https://youtu.be/...">
+      <div style="margin-top:6px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <button class="btn btn-outline" style="padding:5px 12px;font-size:12px" onclick="saveAudioToLib()">📥 Save to Library</button>
+        <span style="font-size:11px;color:var(--muted)">Save this audio for reuse</span>
+      </div>
+    </div>
+    <div id="audioLibWrap" style="display:none;margin-top:10px">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">📚 Saved Audios</div>
+      <div id="audioLibList"></div>
+    </div>
+    <div id="voiceoverInfo" style="display:none;margin-top:8px;font-size:12px;color:var(--muted)">
+      ⓘ After processing, you'll see a preview player. Press Record and speak — your voice will be added to the video.
+    </div>
+  </div>
+
+  <div class="card" style="padding:12px 14px">
+    <div class="card-title">🎬 Transition</div>
+    <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
+      <input type="checkbox" id="enableTransition" style="width:16px;height:16px;accent-color:var(--accent2)">
+      <div>
+        <div style="font-size:14px;color:var(--text)">Fade-to-black transition</div>
+        <div style="font-size:11px;color:var(--muted)">ক্লিপের মাঝে ১ সেকেন্ড অন্ধকার — সাধারণ ও গ্লোবাল মোডে কাজ করে</div>
+      </div>
+    </label>
+  </div>
+
+  <button class="btn btn-primary" id="startBtn" onclick="startJob()" style="width:100%;padding:14px;font-size:16px">
+    ▶ Start Processing
+  </button>
+
+  <div class="status-bar" id="statusBar">
+    <div class="status-title">
+      <span class="spin" id="spinIcon">⚙</span>
+      <span id="statusText">Processing...</span>
+    </div>
+    <div class="log-box" id="logBox"></div>
+  </div>
+
+  <!-- Result card -->
+  <div class="result-card" id="resultCard">
+    <div class="result-header">
+      <div class="result-title">✅ Done!</div>
+      <div class="result-info" id="resultInfo"></div>
+    </div>
+
+    <div class="video-preview-wrap">
+      <video id="videoPreview" controls playsinline>
+        Your browser does not support video.
+      </video>
+    </div>
+
+    <div class="voiceover-section" id="voiceoverSection" style="display:none">
+      <div class="voiceover-title">🎙 Record Voiceover</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:10px">
+        Press Record, then play the video above and speak. Press Stop when done.
+      </div>
+      <div class="recorder-ui">
+        <button class="rec-btn rec-btn-start" id="recStartBtn" onclick="startRecording()">⏺ Record</button>
+        <button class="rec-btn rec-btn-stop" id="recStopBtn" onclick="stopRecording()" style="display:none">⏹ Stop</button>
+        <span class="rec-status" id="recStatus">Ready</span>
+        <span class="rec-timer" id="recTimer">0:00</span>
+      </div>
+      <audio id="audioPreview" class="audio-preview" controls style="display:none;margin-top:10px"></audio>
+      <div class="btn-row">
+        <button class="btn btn-green apply-vo-btn" id="applyVoBtn" onclick="applyVoiceover()">
+          ✅ Apply Voiceover to Video
+        </button>
+        <button class="btn btn-outline apply-vo-btn" id="reRecordBtn" onclick="reRecord()" style="display:none">
+          🔄 Re-record
+        </button>
+      </div>
+    </div>
+
+    <div class="result-actions">
+      <a class="btn btn-outline" id="downloadBtn" href="#" download>⬇ Download</a>
+      <button class="btn btn-green" onclick="uploadYT()">▶ YouTube</button>
+      <button class="btn btn-outline" onclick="uploadDrive()">📂 Drive</button>
+      <button class="btn btn-outline" id="uploadFbBtn" onclick="uploadFacebook()" style="background:#1877f2;color:white;border-color:#1877f2">📘 Facebook</button>
+      <button class="btn btn-outline" id="uploadTtBtn" onclick="uploadTikTok()" style="background:#010101;color:white;border-color:#333">🎵 TikTok</button>
+      <button class="btn btn-outline" id="uploadIgBtn" onclick="uploadInstagram()" style="background:linear-gradient(45deg,#f09433,#dc2743,#bc1888);color:white;border:none">📸 Instagram</button>
+    </div>
+
+    <!-- FB/TT upload modal -->
+    <div id="uploadModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:999;align-items:center;justify-content:center">
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:24px;width:90%;max-width:400px">
+        <div style="font-weight:700;font-size:16px;margin-bottom:16px" id="uploadModalTitle">Upload</div>
+        <div class="settings-row" style="margin-bottom:12px">
+          <label>Title</label>
+          <input type="text" id="uploadModalTitleInput" placeholder="Video title (optional)" style="width:100%;background:var(--bg);color:var(--text);border:1px solid var(--border);padding:6px 10px;border-radius:6px">
+        </div>
+        <div id="uploadModalPrivacyRow" class="settings-row" style="margin-bottom:12px;display:none">
+          <label>TikTok Privacy</label>
+          <select id="uploadModalPrivacy" style="width:100%;background:var(--bg);color:var(--text);border:1px solid var(--border);padding:6px 10px;border-radius:6px">
+            <option value="SELF_ONLY">Only Me (for testing)</option>
+            <option value="FOLLOWER_OF_CREATOR">Followers</option>
+            <option value="MUTUAL_FOLLOW_FRIENDS">Mutual Friends</option>
+            <option value="PUBLIC_TO_EVERYONE">Public</option>
+          </select>
+        </div>
+        <div id="uploadModalDescRow" class="settings-row" style="margin-bottom:16px;display:none">
+          <label>Description</label>
+          <textarea id="uploadModalDescText" rows="3" placeholder="Video description (optional)" style="width:100%;background:var(--bg);color:var(--text);border:1px solid var(--border);padding:6px 10px;border-radius:6px"></textarea>
+        </div>
+        <div id="uploadModalStatus" style="font-size:13px;color:var(--muted);margin-bottom:12px;min-height:20px"></div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-primary" id="uploadModalConfirm" onclick="confirmUpload()">Upload</button>
+          <button class="btn btn-outline" onclick="closeUploadModal()">Cancel</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ═══ JOBS PAGE ═══ -->
+<div class="page" id="page-jobs">
+  <div class="card">
+    <div class="card-title" style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+      📋 All Jobs
+      <button class="btn btn-outline" onclick="loadJobs()" style="padding:4px 10px;font-size:12px">Refresh</button>
+    </div>
+    <div class="jobs-list" id="jobsList">
+      <div style="color:var(--muted);font-size:13px">Loading...</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ SETTINGS PAGE ═══ -->
+<div class="page" id="page-settings">
+  <div class="card">
+    <div class="card-title">🔊 Transition Sound Library</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:10px">Fade transition-এর সময় যে sound বাজবে। একটা select করো।</div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+      <label class="btn btn-outline" style="padding:6px 14px;font-size:13px;cursor:pointer">
+        📁 Upload Sound
+        <input type="file" id="soundFileInput" accept=".mp3,.wav,.ogg,.m4a" style="display:none" onchange="uploadSound(this)">
+      </label>
+      <span style="font-size:11px;color:var(--muted)">mp3 / wav / ogg / m4a</span>
+    </div>
+    <div id="soundLibList" style="display:flex;flex-direction:column;gap:6px"></div>
+    <div id="soundLibEmpty" style="font-size:12px;color:var(--muted);display:none">কোনো sound নেই — উপরে upload করো</div>
+  </div>
+  <div class="card">
+    <div class="card-title">🍪 Cookies (YouTube)</div>
+    <div class="settings-row">
+      <label>cookies.txt (Netscape format)</label>
+      <textarea id="setCookies" rows="5" placeholder="# Netscape HTTP Cookie File&#10;.youtube.com TRUE / ..."></textarea>
+    </div>
+    <button class="btn btn-primary" onclick="saveCookies()">Save Cookies</button>
+    <span class="save-indicator" id="cookiesSaved">✓ Saved</span>
+  </div>
+
+  <div class="card">
+    <div class="card-title">🎵 TikTok Cookies</div>
+    <div class="settings-row">
+      <label>TikTok cookies.txt (Netscape format) — for download + upload</label>
+      <textarea id="setTikTokCookies" rows="5" placeholder="# Netscape HTTP Cookie File&#10;.tiktok.com TRUE / ..."></textarea>
+    </div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:8px">Export from browser after logging in to TikTok. Used for both downloading and uploading.</div>
+    <button class="btn btn-primary" onclick="saveTikTokCookies()">Save TikTok Cookies</button>
+    <span class="save-indicator" id="tiktokCookiesSaved">✓ Saved</span>
+  </div>
+
+  <div class="card">
+    <div class="card-title">🎵 TikTok Upload (Official API)</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:10px">
+      Official TikTok Content Posting API — no cookies needed for upload. Requires a TikTok Developer App.
+      <a href="https://developers.tiktok.com/apps/" target="_blank" style="color:var(--accent2)">Create App →</a>
+    </div>
+    <div class="settings-row">
+      <label>TIKTOK_CLIENT_KEY</label>
+      <input type="text" id="setTtClientKey" placeholder="awxxxxxxxxxxxxxxxx">
+    </div>
+    <div class="settings-row">
+      <label>TIKTOK_CLIENT_SECRET</label>
+      <input type="password" id="setTtClientSecret" placeholder="Client secret from TikTok Developer Portal">
+    </div>
+    <div class="settings-row">
+      <label>TIKTOK_REDIRECT_URI</label>
+      <input type="text" id="setTtRedirectUri" placeholder="https://your-app.railway.app/api/upload/tiktok/callback">
+    </div>
+    <div class="settings-row">
+      <label>TIKTOK_ACCESS_TOKEN (auto-filled after Connect)</label>
+      <input type="password" id="setTtAccessToken" placeholder="Leave empty — filled automatically after OAuth">
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:6px">
+      <button class="btn btn-primary" onclick="saveTikTokApi()">Save Keys</button>
+      <a class="btn btn-outline" id="ttConnectBtn" href="/api/upload/tiktok/auth" target="_blank" style="text-decoration:none">🔗 Connect TikTok Account</a>
+      <span id="ttConnectedBadge" style="display:none;background:#22c55e;color:white;padding:4px 10px;border-radius:20px;font-size:12px;font-weight:600">✓ Connected</span>
+      <span class="save-indicator" id="ttApiSaved">✓ Saved</span>
+    </div>
+    <div style="font-size:12px;color:var(--muted);margin-top:8px">
+      After saving keys, click <b>Connect TikTok Account</b> → approve → access token is saved automatically.
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">📸 Instagram Upload (OAuth)</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:10px">
+      Instagram Graph API — Business/Creator account লাগবে। Facebook Developer App এ Instagram product enable করো।
+      Redirect URI: <code>https://your-app.railway.app/api/upload/instagram/callback</code>
+    </div>
+    <div class="settings-row">
+      <label>IG_APP_ID (Facebook App ID — same app)</label>
+      <input type="text" id="setIgAppId" placeholder="Same as FB_APP_ID">
+    </div>
+    <div class="settings-row">
+      <label>IG_APP_SECRET</label>
+      <input type="password" id="setIgAppSecret" placeholder="App Secret">
+    </div>
+    <div class="settings-row">
+      <label>IG_REDIRECT_URI</label>
+      <input type="text" id="setIgRedirectUri" placeholder="https://your-app.railway.app/api/upload/instagram/callback">
+    </div>
+    <div class="settings-row">
+      <label>IG_ACCOUNT_ID (auto-filled after connect)</label>
+      <input type="text" id="setIgAccountId" placeholder="Auto-filled after login">
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:6px">
+      <button class="btn btn-primary" onclick="saveInstagram()">Save Keys</button>
+      <a class="btn btn-outline" href="/api/upload/instagram/auth" target="_blank" style="text-decoration:none;background:linear-gradient(45deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888);color:white;border:none">🔗 Connect Instagram</a>
+      <span id="igConnectedBadge" style="display:none;background:#22c55e;color:white;padding:4px 10px;border-radius:20px;font-size:12px;font-weight:600">✓ Connected</span>
+      <span class="save-indicator" id="igSaved">✓ Saved</span>
+    </div>
+    <div style="font-size:12px;color:var(--muted);margin-top:8px">Keys সেভ করার পর <b>Connect Instagram</b> ক্লিক করো → login করো → token auto-save হবে।</div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">🎬 Kuaishou Cookies</div>
+    <div class="settings-row">
+      <label>Browser cookie string from kuaishou.com</label>
+      <textarea id="ksCookies" rows="3" placeholder="kpf=PC_WEB; clientid=3; did=web_xxx..."></textarea>
+    </div>
+    <button class="btn btn-primary" onclick="saveKsCookies()">Save KS Cookies</button>
+    <span class="save-indicator" id="ksCookiesSaved">✓ Saved</span>
+  </div>
+
+  <div class="card">
+    <div class="card-title">📘 Facebook Upload (OAuth)</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:10px">
+      Facebook Developer App বানাও →
+      <a href="https://developers.facebook.com/apps/" target="_blank" style="color:var(--accent2)">developers.facebook.com</a>.
+      Redirect URI: <code id="fbRedirectUriHint">https://your-app.railway.app/api/upload/facebook/callback</code>
+    </div>
+    <div class="settings-row">
+      <label>FB_APP_ID</label>
+      <input type="text" id="setFbAppId" placeholder="123456789012345">
+    </div>
+    <div class="settings-row">
+      <label>FB_APP_SECRET</label>
+      <input type="password" id="setFbAppSecret" placeholder="App Secret from Facebook Developer Portal">
+    </div>
+    <div class="settings-row">
+      <label>FB_REDIRECT_URI</label>
+      <input type="text" id="setFbRedirectUri" placeholder="https://your-app.railway.app/api/upload/facebook/callback">
+    </div>
+    <div class="settings-row">
+      <label>FB_PAGE_ID (Page ID — auto-filled after connect)</label>
+      <input type="text" id="setFbPageId" placeholder="Auto-filled after login">
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:6px">
+      <button class="btn btn-primary" onclick="saveFacebook()">Save Keys</button>
+      <a class="btn btn-outline" href="/api/upload/facebook/auth" target="_blank" style="text-decoration:none;background:#1877f2;color:white;border-color:#1877f2">🔗 Connect Facebook</a>
+      <span id="fbConnectedBadge" style="display:none;background:#22c55e;color:white;padding:4px 10px;border-radius:20px;font-size:12px;font-weight:600">✓ Connected</span>
+      <span class="save-indicator" id="fbSaved">✓ Saved</span>
+    </div>
+    <div style="font-size:12px;color:var(--muted);margin-top:8px">Keys সেভ করার পর <b>Connect Facebook</b> ক্লিক করো → login করো → token auto-save হবে।</div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">📂 Google Drive</div>
+    <div class="settings-row">
+      <label>DRIVE_FOLDER_ID (folder link or ID)</label>
+      <input type="text" id="setDriveFolder" placeholder="https://drive.google.com/drive/folders/ABC... or just ABC...">
+    </div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:8px">Videos will be uploaded to this folder. Leave empty to use root.</div>
+    <button class="btn btn-primary" onclick="saveDriveFolder()">Save Drive Folder</button>
+    <span class="save-indicator" id="driveFolderSaved">✓ Saved</span>
+  </div>
+
+  <div class="card">
+    <div class="card-title">🔗 Proxy / Xray</div>
+    <div class="settings-row">
+      <label>YTDLP_PROXY</label>
+      <input type="text" id="setProxy" placeholder="socks5://127.0.0.1:1080">
+    </div>
+    <div class="settings-row">
+      <label>VMess / VLess / Trojan link</label>
+      <input type="text" id="setVmess" placeholder="vmess://eyJ...">
+    </div>
+    <button class="btn btn-primary" onclick="saveProxy()">Save Proxy</button>
+    <span class="save-indicator" id="proxySaved">✓ Saved</span>
+  </div>
+
+  <div class="card">
+    <div class="card-title">🔑 Google OAuth</div>
+    <div class="settings-row">
+      <label>GOOGLE_CLIENT_ID</label>
+      <input type="text" id="setGClientId" placeholder="xxx.apps.googleusercontent.com">
+    </div>
+    <div class="settings-row">
+      <label>GOOGLE_CLIENT_SECRET</label>
+      <input type="password" id="setGClientSecret" placeholder="GOCSPX-...">
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-primary" onclick="saveGoogle()">Save</button>
+      <a class="btn btn-outline" href="/auth/google">Connect Google Account</a>
+    </div>
+    <span class="save-indicator" id="googleSaved">✓ Saved</span>
+  </div>
+</div>
+
+<!-- ═══ SYSTEM PAGE ═══ -->
+<div class="page" id="page-system">
+  <div class="card">
+    <div class="card-title" style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+      System Status
+      <button class="btn btn-outline" onclick="loadVersion()" style="padding:4px 10px;font-size:12px">Refresh</button>
+    </div>
+    <div class="version-grid" id="versionGrid">
+      <div style="color:var(--muted);font-size:13px;grid-column:1/-1">Loading...</div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─── Safe API caller ──────────────────────────────────────
+async function safeFetch(url, label) {
+  try {
+    const res = await fetch(url);
+    const ct = res.headers.get('content-type') || '';
+    if (!ct.includes('application/json')) {
+      console.warn(label + ' — not JSON, got: ' + ct.substring(0, 80));
+      return null;
+    }
+    return await res.json();
+  } catch (e) {
+    console.warn(label + ' — ' + e.message);
+    return null;
+  }
+}
+
+// ─── Nav ──────────────────────────────────────────────────
+function showPage(name, el) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+  if (el) el.classList.add('active');
+  if (name === 'system') loadVersion();
+  if (name === 'jobs') loadJobs();
+}
+
+// ─── Sources ──────────────────────────────────────────────
+let srcCount = 0;
+function getPlatformIcon(url) {
+  if (/instagram/.test(url))         return '📸';
+  if (/tiktok|vm\.tiktok/.test(url)) return '🎵';
+  if (/kuaishou|ks\.com/.test(url))  return '🎬';
+  if (/youtube|youtu\.be/.test(url)) return '▶️';
+  return '🔗';
+}
+function addSource(url='') {
+  srcCount++;
+  const id = 'src_' + srcCount;
+  const div = document.createElement('div');
+  div.id = id;
+  div.style.marginBottom = '8px';
+  div.innerHTML = `
+    <div class="source-wrap">
+      <div class="source-row">
+        <span class="platform-icon" id="${id}_icon">${getPlatformIcon(url)}</span>
+        <input type="url" placeholder="YouTube / Instagram / TikTok / Kuaishou URL"
+          value="${url}" oninput="updateIcon('${id}',this.value)" onblur="fetchDuration('${id}',this.value)"/>
+        <button class="remove-btn" onclick="document.getElementById('${id}').remove()">×</button>
+      </div>
+      <div class="source-meta">
+        <span class="duration-badge" id="${id}_dur" style="display:none"></span>
+        <button class="clip-toggle" id="${id}_clipBtn" onclick="toggleClip('${id}')">✂ Clip & Speed</button>
+      </div>
+      <div class="source-title-row">
+        <input type="text" id="${id}_rankTitle" placeholder="Ranking title for this clip — বাংলা + emoji OK">
+      </div>
+      <div class="clip-panel" id="${id}_clip">
+        <div class="clip-panel-row">
+          <div class="field">
+            <label>Start</label>
+            <input type="text" placeholder="00:01:30" id="${id}_start">
+          </div>
+          <div class="field">
+            <label>End</label>
+            <input type="text" placeholder="00:02:45" id="${id}_end">
+          </div>
+        </div>
+        <div class="clip-panel-speed">
+          <label>Speed</label>
+          <select id="${id}_speed">
+            <option value="0.5">0.5x</option>
+            <option value="0.75">0.75x</option>
+            <option value="1" selected>1x (normal)</option>
+            <option value="1.25">1.25x</option>
+            <option value="1.5">1.5x</option>
+            <option value="2">2x</option>
+          </select>
+        </div>
+      </div>
+    </div>`;
+  document.getElementById('sourcesList').appendChild(div);
+}
+function updateIcon(id, url) {
+  const el = document.getElementById(id+'_icon');
+  if (el) el.textContent = getPlatformIcon(url);
+}
+function toggleClip(id) {
+  const panel = document.getElementById(id+'_clip');
+  const btn   = document.getElementById(id+'_clipBtn');
+  panel.classList.toggle('show');
+  btn.classList.toggle('active');
+}
+
+// ─── Duration probe ───────────────────────────────────────
+const _durCache = {};
+async function fetchDuration(id, url) {
+  if (!url || !url.startsWith('http')) return;
+  const badge = document.getElementById(id+'_dur');
+  if (!badge) return;
+  if (_durCache[url]) { badge.textContent = _durCache[url]; badge.style.display = ''; return; }
+  try {
+    badge.textContent = '…'; badge.style.display = '';
+    const r = await safeFetch('/api/mixer/duration?url=' + encodeURIComponent(url), 'duration');
+    if (r && r.formatted) { _durCache[url] = r.formatted; badge.textContent = r.formatted; }
+    else badge.style.display = 'none';
+  } catch(_) { badge.style.display = 'none'; }
+}
+
+addSource(); addSource();
+
+// ─── Audio mode toggle ─────────────────────────────────────
+document.querySelectorAll('input[name=audio]').forEach(r => {
+  r.addEventListener('change', () => {
+    document.getElementById('audioUrlWrap').style.display  = r.value === 'audio_url' ? 'block' : 'none';
+    document.getElementById('voiceoverInfo').style.display = r.value === 'voiceover'  ? 'block' : 'none';
+    if (r.value === 'audio_url') renderAudioLib();
+  });
+});
+
+// ─── Audio Library ────────────────────────────────────────
+let audioLib = [];
+async function loadAudioLib() {
+  const data = await safeFetch('/api/setup/audio-lib', 'audio-lib');
+  if (data && Array.isArray(data)) { audioLib = data; renderAudioLib(); }
+}
+async function saveAudioToLib() {
+  const url = document.getElementById('audioUrl').value.trim();
+  if (!url) return alert('Enter an audio URL first');
+  const name = url.split('/').pop().split('?')[0] || url.slice(-30);
+  audioLib.push({ url, name, addedAt: Date.now() });
+  await fetch('/api/setup/audio-lib', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(audioLib) });
+  renderAudioLib();
+  document.getElementById('audioLibWrap').style.display = 'block';
+}
+async function deleteAudioFromLib(idx) {
+  audioLib.splice(idx, 1);
+  await fetch('/api/setup/audio-lib', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(audioLib) });
+  renderAudioLib();
+}
+function useAudioFromLib(url) {
+  document.getElementById('audioUrl').value = url;
+  document.getElementById('radioAudioUrl').checked = true;
+  document.getElementById('audioUrlWrap').style.display = 'block';
+}
+function renderAudioLib() {
+  const wrap = document.getElementById('audioLibWrap');
+  const list = document.getElementById('audioLibList');
+  if (!audioLib.length) { wrap.style.display = 'none'; return; }
+  wrap.style.display = 'block';
+  list.innerHTML = audioLib.map((a, i) => `
+    <div class="audio-lib-item">
+      <span class="audio-lib-name" title="${a.url}">${a.name || a.url}</span>
+      <button class="use-btn" onclick="useAudioFromLib(decodeURIComponent('${encodeURIComponent(a.url)}'))">Use</button>
+      <button class="del-btn" onclick="deleteAudioFromLib(${i})">×</button>
+    </div>`).join('');
+}
+// ─── Heading Color ────────────────────────────────────────
+function setHeadingColor(el, hex) {
+  document.querySelectorAll('.hc-swatch').forEach(s => s.style.border = '2px solid #555');
+  el.style.border = '2px solid #fff';
+  document.getElementById('headingAccentColor').value = hex;
+  document.getElementById('headingColorCustom').value = hex;
+}
+function setHeadingColorHex(hex) {
+  document.querySelectorAll('.hc-swatch').forEach(s => s.style.border = '2px solid #555');
+  document.getElementById('headingAccentColor').value = hex;
+}
+
+// ─── Global Title Color ───────────────────────────────────
+function setGlobalTitleColor(el, hex) {
+  document.querySelectorAll('.gc-swatch').forEach(s => s.style.border = '2px solid #555');
+  el.style.border = '2px solid #fff';
+  document.getElementById('globalTitleAccentColor').value = hex;
+  document.getElementById('globalTitleColorCustom').value = hex;
+}
+function setGlobalTitleColorHex(hex) {
+  document.querySelectorAll('.gc-swatch').forEach(s => s.style.border = '2px solid #555');
+  document.getElementById('globalTitleAccentColor').value = hex;
+}
+
+loadAudioLib();
+
+// ─── Job ──────────────────────────────────────────────────
+let currentJobId = null;
+
+async function startJob() {
+  const sources = [];
+  document.querySelectorAll('#sourcesList > div').forEach(row => {
+    const id  = row.id;
+    const url = row.querySelector('input[type=url]')?.value?.trim();
+    if (!url) return;
+    const s = { url };
+    const rankTitle = document.getElementById(id+'_rankTitle')?.value?.trim();
+    if (rankTitle) s.rankTitle = rankTitle;
+    const st = document.getElementById(id+'_start')?.value?.trim();
+    const et = document.getElementById(id+'_end')?.value?.trim();
+    if (st && et) { s.startTime = st; s.endTime = et; }
+    const spd = document.getElementById(id+'_speed')?.value;
+    if (spd && parseFloat(spd) !== 1) s.speed = parseFloat(spd);
+    sources.push(s);
+  });
+  if (!sources.length) return alert('Add at least one video URL');
+
+  const audioMode = document.querySelector('input[name=audio]:checked').value;
+  const isVoiceover = audioMode === 'voiceover';
+
+  const payload = {
+    sources,
+    heading: document.getElementById('headingText').value.trim()
+      ? {
+          text: document.getElementById('headingText').value.trim(),
+          position: document.getElementById('headingPos').value,
+          fontSize: parseInt(document.getElementById('headingFontSize').value || '52', 10) || 52,
+          platform: document.getElementById('uploadPlatform').value,
+          showBg: document.getElementById('headingShowBg').checked,
+          accentColor: document.getElementById('headingAccentColor').value || null,
+        }
+      : null,
+    ranking: {
+      enabled: document.getElementById('rankingEnabled').checked,
+      direction: document.getElementById('rankingDirection').value,
+      preset: document.getElementById('rankingPreset').value,
+      globalTitle: document.getElementById('rankingGlobalTitle').value.trim(),
+      accentColor: document.getElementById('globalTitleAccentColor').value || '#22c55e',
+    },
+    audioOpts: {
+      mode: isVoiceover ? 'mute' : audioMode,
+      audioUrl: document.getElementById('audioUrl').value.trim() || null,
+    },
+    enableTransition: document.getElementById('enableTransition').checked,
+  };
+
+  const btn = document.getElementById('startBtn');
+  btn.disabled = true; btn.textContent = '⚙ Processing...';
+  document.getElementById('statusBar').classList.add('show');
+  document.getElementById('resultCard').classList.remove('show');
+  document.getElementById('logBox').innerHTML = '';
+  document.getElementById('spinIcon').style.display = 'inline-block';
+  document.getElementById('statusText').textContent = 'Starting...';
+
+  try {
+    const res  = await fetch('/api/mixer/jobs', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+    const data = await res.json();
+    if (!data.jobId) throw new Error(data.error || 'No jobId');
+    currentJobId = data.jobId;
+    streamLogs(currentJobId, isVoiceover);
+  } catch(e) {
+    document.getElementById('statusText').textContent = '❌ ' + e.message;
+    btn.disabled = false; btn.textContent = '▶ Start Processing';
+  }
+}
+
+function streamLogs(jobId, isVoiceover) {
+  const logBox = document.getElementById('logBox');
+  const es = new EventSource('/api/mixer/jobs/' + jobId + '/stream');
+  es.onmessage = e => {
+    const data = JSON.parse(e.data);
+    if (data.type === 'status') {
+      document.getElementById('statusText').textContent =
+        data.status === 'downloading' ? '📥 Downloading...' :
+        data.status === 'merging'     ? '🎬 Merging...'     :
+        data.status === 'done'        ? '✅ Done!'           : '❌ Error';
+      if (data.status === 'done' || data.status === 'error') {
+        document.getElementById('spinIcon').style.display = 'none';
+        document.getElementById('startBtn').disabled = false;
+        document.getElementById('startBtn').textContent = '▶ Start Processing';
+        if (data.status === 'done') loadResult(jobId, isVoiceover);
+        es.close();
+      }
+      return;
+    }
+    if (data.type === 'close') { es.close(); return; }
+    const line = document.createElement('div');
+    line.className = 'log-line ' + (data.msg?.startsWith('✅') ? 'ok' : data.level || 'info');
+    line.textContent = data.msg || '';
+    logBox.appendChild(line);
+    logBox.scrollTop = logBox.scrollHeight;
+  };
+  es.onerror = () => {
+    es.close();
+    document.getElementById('startBtn').disabled = false;
+    document.getElementById('startBtn').textContent = '▶ Start Processing';
+  };
+}
+
+async function loadResult(jobId, isVoiceover) {
+  const res = await fetch('/api/mixer/jobs/' + jobId);
+  const job = await res.json();
+  if (job.status !== 'done' || !job.result) return;
+  const r = job.result;
+  const mb = (r.sizeBytes / 1024 / 1024).toFixed(2);
+  const fileUrl = '/files/' + encodeURIComponent(r.fileName);
+  document.getElementById('resultInfo').textContent = r.fileName + '  •  ' + mb + ' MB';
+  document.getElementById('downloadBtn').href = fileUrl;
+  document.getElementById('downloadBtn').download = r.fileName;
+  const video = document.getElementById('videoPreview');
+  video.src = fileUrl; video.load();
+  document.getElementById('voiceoverSection').style.display = isVoiceover ? 'block' : 'none';
+  document.getElementById('resultCard').classList.add('show');
+  document.getElementById('resultCard').scrollIntoView({ behavior: 'smooth' });
+}
+
+// ─── Jobs page ────────────────────────────────────────────
+async function loadJobs() {
+  const list = document.getElementById('jobsList');
+  if (!list) return;
+  try {
+    const jobs = await safeFetch('/api/mixer/jobs', 'jobs');
+    if (!jobs || !jobs.length) { list.innerHTML = '<div style="color:var(--muted);font-size:13px">No jobs yet</div>'; return; }
+    list.innerHTML = jobs.slice().reverse().map(j => {
+      const dt = new Date(j.createdAt).toLocaleString();
+      const name = j.result?.fileName || j.id;
+      const sc = j.status === 'done' ? 'job-status-done' : j.status === 'error' ? 'job-status-error' : 'job-status-running';
+      const fileUrl = j.result?.fileName ? '/files/' + encodeURIComponent(j.result.fileName) : null;
+      return '<div class="job-item">'
+        + '<div class="job-info"><div class="job-name">' + name + '</div>'
+        + '<div style="font-size:11px;color:var(--muted)">' + dt + '</div>'
+        + (j.error ? '<div style="font-size:11px;color:var(--red)">' + j.error + '</div>' : '')
+        + '</div>'
+        + '<span class="job-status ' + sc + '">' + j.status + '</span>'
+        + (fileUrl ? '<a class="btn btn-outline" href="' + fileUrl + '" download style="padding:4px 10px;font-size:12px">⬇</a>' : '')
+        + '<button class="btn btn-red" style="padding:4px 10px;font-size:12px" onclick="deleteJobItem(\'' + j.id + '\')">🗑</button>'
+        + '</div>';
+    }).join('');
+  } catch(e) { list.innerHTML = '<div style="color:var(--red)">Error: ' + e.message + '</div>'; }
+}
+
+async function deleteJobItem(id) {
+  await fetch('/api/mixer/jobs/' + id, { method: 'DELETE' });
+  loadJobs();
+}
+
+// ─── Voiceover recorder ────────────────────────────────────
+let mediaRecorder = null, recordedChunks = [], recTimerInterval = null, recSeconds = 0, recordedBlob = null;
+
+async function startRecording() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    mediaRecorder = new MediaRecorder(stream);
+    recordedChunks = [];
+    mediaRecorder.ondataavailable = e => { if (e.data.size > 0) recordedChunks.push(e.data); };
+    mediaRecorder.onstop = () => {
+      recordedBlob = new Blob(recordedChunks, { type: 'audio/webm' });
+      const url = URL.createObjectURL(recordedBlob);
+      const audio = document.getElementById('audioPreview');
+      audio.src = url; audio.style.display = 'block';
+      document.getElementById('applyVoBtn').classList.add('show');
+      document.getElementById('reRecordBtn').classList.add('show');
+      stream.getTracks().forEach(t => t.stop());
+    };
+    mediaRecorder.start();
+    recSeconds = 0;
+    document.getElementById('recStartBtn').style.display = 'none';
+    document.getElementById('recStopBtn').style.display  = 'flex';
+    document.getElementById('recStatus').textContent = '● Recording';
+    document.getElementById('recStatus').className = 'rec-status recording';
+    recTimerInterval = setInterval(() => {
+      recSeconds++;
+      const m = Math.floor(recSeconds/60), s = recSeconds % 60;
+      document.getElementById('recTimer').textContent = m + ':' + String(s).padStart(2,'0');
+    }, 1000);
+    document.getElementById('videoPreview').currentTime = 0;
+    document.getElementById('videoPreview').play();
+  } catch(e) { alert('Microphone access denied: ' + e.message); }
+}
+
+function stopRecording() {
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
+  clearInterval(recTimerInterval);
+  document.getElementById('videoPreview').pause();
+  document.getElementById('recStartBtn').style.display = 'flex';
+  document.getElementById('recStopBtn').style.display  = 'none';
+  document.getElementById('recStatus').textContent = 'Done — preview below';
+  document.getElementById('recStatus').className = 'rec-status';
+}
+
+function reRecord() {
+  recordedBlob = null;
+  document.getElementById('audioPreview').style.display = 'none';
+  document.getElementById('applyVoBtn').classList.remove('show');
+  document.getElementById('reRecordBtn').classList.remove('show');
+  document.getElementById('recStatus').textContent = 'Ready';
+  document.getElementById('recTimer').textContent = '0:00';
+}
+
+async function applyVoiceover() {
+  if (!recordedBlob || !currentJobId) return;
+  const btn = document.getElementById('applyVoBtn');
+  btn.textContent = '⚙ Applying...'; btn.disabled = true;
+  const form = new FormData();
+  form.append('jobId', currentJobId);
+  form.append('voiceover', recordedBlob, 'voiceover.webm');
+  try {
+    const res  = await fetch('/api/mixer/voiceover', { method:'POST', body: form });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'Failed');
+    const newUrl = '/files/' + encodeURIComponent(data.fileName);
+    document.getElementById('videoPreview').src = newUrl;
+    document.getElementById('videoPreview').load();
+    document.getElementById('downloadBtn').href = newUrl;
+    document.getElementById('downloadBtn').download = data.fileName;
+    document.getElementById('resultInfo').textContent = data.fileName + '  •  ' + (data.sizeBytes/1024/1024).toFixed(2) + ' MB';
+    btn.textContent = '✅ Applied!';
+    setTimeout(() => { btn.textContent = '✅ Apply Voiceover to Video'; btn.disabled = false; }, 2000);
+  } catch(e) {
+    alert('Voiceover failed: ' + e.message);
+    btn.textContent = '✅ Apply Voiceover to Video'; btn.disabled = false;
+  }
+}
+
+// ─── Upload ───────────────────────────────────────────────
+async function uploadYT()    { alert('YouTube upload — configure OAuth in Settings first.'); }
+async function uploadDrive() { alert('Google Drive upload — configure OAuth in Settings first.'); }
+
+// ── Upload Modal state ──
+let _uploadTarget = null;
+
+function uploadFacebook() {
+  _uploadTarget = 'facebook';
+  document.getElementById('uploadModalTitle').textContent = '📘 Upload to Facebook';
+  document.getElementById('uploadModalPrivacyRow').style.display = 'none';
+  document.getElementById('uploadModalDescRow').style.display    = 'block';
+  document.getElementById('uploadModalStatus').textContent       = '';
+  document.getElementById('uploadModalTitleInput').value         = '';
+  document.getElementById('uploadModalDescText').value           = '';
+  document.getElementById('uploadModal').style.display           = 'flex';
+}
+
+function uploadTikTok() {
+  _uploadTarget = 'tiktok';
+  document.getElementById('uploadModalTitle').textContent     = '🎵 Upload to TikTok';
+  document.getElementById('uploadModalPrivacyRow').style.display = 'block';
+  document.getElementById('uploadModalDescRow').style.display    = 'none';
+  document.getElementById('uploadModalStatus').textContent        = '';
+  document.getElementById('uploadModalTitleInput').value          = '';
+  document.getElementById('uploadModal').style.display            = 'flex';
+}
+
+function uploadInstagram() {
+  _uploadTarget = 'instagram';
+  document.getElementById('uploadModalTitle').textContent     = '📸 Upload to Instagram';
+  document.getElementById('uploadModalPrivacyRow').style.display = 'none';
+  document.getElementById('uploadModalDescRow').style.display    = 'block';
+  document.getElementById('uploadModalStatus').textContent        = '';
+  document.getElementById('uploadModalTitleInput').value          = '';
+  document.getElementById('uploadModalDescText').value            = '';
+  document.getElementById('uploadModal').style.display            = 'flex';
+}
+
+function closeUploadModal() {
+  document.getElementById('uploadModal').style.display = 'none';
+}
+
+async function confirmUpload() {
+  if (!currentJobId) { alert('No completed job found.'); return; }
+  const btn    = document.getElementById('uploadModalConfirm');
+  const status = document.getElementById('uploadModalStatus');
+  btn.disabled = true;
+  status.textContent = '⏳ Uploading…';
+
+  const title = document.getElementById('uploadModalTitleInput').value.trim();
+  const body  = { jobId: currentJobId, title };
+
+  if (_uploadTarget === 'facebook') {
+    body.description = document.getElementById('uploadModalDescText').value.trim();
+  } else if (_uploadTarget === 'instagram') {
+    body.caption = document.getElementById('uploadModalDescText').value.trim();
+  } else {
+    body.privacy = document.getElementById('uploadModalPrivacy').value;
+  }
+
+  try {
+    const r = await fetch(`/api/upload/${_uploadTarget}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await r.json();
+    if (data.ok) {
+      const link = data.url ? ` <a href="${data.url}" target="_blank" style="color:var(--accent2)">View →</a>` : '';
+      status.innerHTML = `✅ Upload complete!${link}`;
+      btn.disabled = false;
+    } else {
+      status.textContent = '❌ ' + (data.error || 'Upload failed');
+      btn.disabled = false;
+    }
+  } catch(e) {
+    status.textContent = '❌ ' + e.message;
+    btn.disabled = false;
+  }
+}
+
+// ── TikTok API settings ──
+async function saveTikTokApi() {
+  const payload = {
+    TIKTOK_CLIENT_KEY:    document.getElementById('setTtClientKey').value.trim(),
+    TIKTOK_CLIENT_SECRET: document.getElementById('setTtClientSecret').value.trim(),
+    TIKTOK_REDIRECT_URI:  document.getElementById('setTtRedirectUri').value.trim(),
+  };
+  const tok = document.getElementById('setTtAccessToken').value.trim();
+  if (tok) payload.TIKTOK_ACCESS_TOKEN = tok;
+  await saveConfig(payload, 'ttApiSaved');
+}
+
+// ─── Settings ─────────────────────────────────────────────
+async function saveConfig(data, id) {
+  await fetch('/api/setup/config', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(data) });
+  const el = document.getElementById(id);
+  if (el) { el.classList.add('show'); setTimeout(() => el.classList.remove('show'), 2000); }
+}
+async function saveCookies() {
+  const val = document.getElementById('setCookies').value.trim();
+  await fetch('/api/setup/cookies', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ cookies: val }) });
+  const el = document.getElementById('cookiesSaved');
+  if (el) { el.classList.add('show'); setTimeout(() => el.classList.remove('show'), 2000); }
+}
+async function saveTikTokCookies() {
+  const val = document.getElementById('setTikTokCookies').value.trim();
+  await fetch('/api/setup/tiktok-cookies', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ cookies: val }) });
+  const el = document.getElementById('tiktokCookiesSaved');
+  if (el) { el.classList.add('show'); setTimeout(() => el.classList.remove('show'), 2000); }
+}
+async function saveInstagram()  { await saveConfig({ IG_APP_ID: document.getElementById('setIgAppId').value.trim(), IG_APP_SECRET: document.getElementById('setIgAppSecret').value.trim(), IG_REDIRECT_URI: document.getElementById('setIgRedirectUri').value.trim() }, 'igSaved'); }
+async function saveKsCookies()  { await saveConfig({ KS_COOKIES: document.getElementById('ksCookies').value.trim() }, 'ksCookiesSaved'); }
+async function saveProxy()      { await saveConfig({ YTDLP_PROXY: document.getElementById('setProxy').value.trim(), VMESS_LINK: document.getElementById('setVmess').value.trim() }, 'proxySaved'); }
+async function saveGoogle()     { await saveConfig({ GOOGLE_CLIENT_ID: document.getElementById('setGClientId').value.trim(), GOOGLE_CLIENT_SECRET: document.getElementById('setGClientSecret').value.trim() }, 'googleSaved'); }
+async function saveFacebook()   { await saveConfig({ FB_APP_ID: document.getElementById('setFbAppId').value.trim(), FB_APP_SECRET: document.getElementById('setFbAppSecret').value.trim(), FB_REDIRECT_URI: document.getElementById('setFbRedirectUri').value.trim() }, 'fbSaved'); }
+async function saveDriveFolder() {
+  let val = document.getElementById('setDriveFolder').value.trim();
+  const m = val.match(/folders\/([a-zA-Z0-9_-]+)/);
+  if (m) val = m[1];
+  await saveConfig({ DRIVE_FOLDER_ID: val }, 'driveFolderSaved');
+}
+
+// ─── Load saved settings into fields on page load ─────────
+async function loadSettingsOnPageLoad() {
+  const cfg = await safeFetch('/api/setup/config', 'loadSettings');
+  if (cfg) {
+    const set = (id, val) => { const el = document.getElementById(id); if (el && val) el.value = val; };
+    set('setProxy',         cfg.YTDLP_PROXY);
+    set('setVmess',         cfg.VMESS_LINK);
+    set('setGClientId',     cfg.GOOGLE_CLIENT_ID);
+    set('setTtClientKey',   cfg.TIKTOK_CLIENT_KEY);
+    set('setTtRedirectUri', cfg.TIKTOK_REDIRECT_URI);
+    set('setTtAccessToken', cfg.TIKTOK_ACCESS_TOKEN);
+    set('setIgAppId',       cfg.IG_APP_ID);
+    set('setIgRedirectUri', cfg.IG_REDIRECT_URI);
+    set('setIgAccountId',   cfg.IG_ACCOUNT_ID);
+    set('setFbAppId',       cfg.FB_APP_ID);
+    set('setFbRedirectUri', cfg.FB_REDIRECT_URI);
+    set('setFbPageId',      cfg.FB_PAGE_ID);
+    set('setDriveFolder',   cfg.DRIVE_FOLDER_ID);
+    if (cfg.KS_COOKIES) set('ksCookies', cfg.KS_COOKIES);
+  }
+
+  const v = await safeFetch('/version', 'badge');
+  if (v) {
+    const badge = (id, show) => { const el = document.getElementById(id); if (el) el.style.display = show ? 'inline-block' : 'none'; };
+    badge('ttConnectedBadge', v.tiktok_token);
+    badge('igConnectedBadge', v.ig_token && v.ig_account);
+    badge('fbConnectedBadge', v.fb_token && v.fb_page);
+  }
+}
+
+
+// ─── Sound Library ────────────────────────────────────────
+let soundMeta = { selected: null, files: [] };
+
+async function loadSoundLib() {
+  const data = await safeFetch('/api/setup/sounds', 'sound-lib');
+  if (data) { soundMeta = data; renderSoundLib(); }
+}
+
+async function uploadSound(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const fd = new FormData();
+  fd.append('sound', file);
+  try {
+    const res = await fetch('/api/setup/sounds', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (data.ok) { await loadSoundLib(); }
+    else alert('Upload failed: ' + (data.error || ''));
+  } catch(e) { alert('Upload error: ' + e.message); }
+  input.value = '';
+}
+
+async function selectSound(filename) {
+  const sel = soundMeta.selected === filename ? null : filename;
+  await fetch('/api/setup/sounds/select', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ filename: sel })
+  });
+  soundMeta.selected = sel;
+  renderSoundLib();
+}
+
+async function deleteSound(filename) {
+  if (!confirm('এই sound মুছে ফেলবো?')) return;
+  await fetch('/api/setup/sounds/' + encodeURIComponent(filename), { method: 'DELETE' });
+  await loadSoundLib();
+}
+
+function renderSoundLib() {
+  const list = document.getElementById('soundLibList');
+  const empty = document.getElementById('soundLibEmpty');
+  if (!list) return;
+  const files = soundMeta.files || [];
+  if (!files.length) { list.innerHTML = ''; empty.style.display = 'block'; return; }
+  empty.style.display = 'none';
+  list.innerHTML = files.map(f => {
+    const isSelected = soundMeta.selected === f.filename;
+    return `<div style="display:flex;align-items:center;gap:8px;background:var(--surface2);border:1px solid ${isSelected ? 'var(--accent)' : 'var(--border)'};border-radius:8px;padding:8px 10px">
+      <audio src="/api/setup/sounds/file/${f.filename}" style="flex:1;height:28px;min-width:0" controls></audio>
+      <span style="font-size:11px;color:var(--muted);max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${f.originalName}</span>
+      <button onclick="selectSound('${f.filename}')" style="font-size:12px;padding:4px 10px;border-radius:6px;background:${isSelected ? 'var(--accent)' : 'var(--surface)'};color:${isSelected ? 'white' : 'var(--text)'};border:1px solid var(--border);cursor:pointer">${isSelected ? '✓ Selected' : 'Use'}</button>
+      <button onclick="deleteSound('${f.filename}')" style="font-size:16px;background:none;border:none;color:var(--muted);cursor:pointer">🗑</button>
+    </div>`;
+  }).join('');
+}
+
+document.addEventListener('DOMContentLoaded', () => { loadSettingsOnPageLoad(); loadSoundLib(); });
+
+// ─── Version ──────────────────────────────────────────────
+async function loadVersion() {
+  const grid = document.getElementById('versionGrid');
+  grid.innerHTML = '<div style="color:var(--muted);font-size:13px;grid-column:1/-1">Loading...</div>';
+  const v = await safeFetch('/version', 'version');
+  if (!v) { grid.innerHTML = '<div style="color:var(--red);grid-column:1/-1">Failed to load version info</div>'; return; }
+  const items = [
+    ['ffmpeg',   v.ffmpeg?.split(' ').slice(0,3).join(' ')||'n/a'],
+    ['yt-dlp',   v.ytdlp||'n/a'],
+    ['Deno',     v.deno?.split('\n')[0]||'n/a'],
+    ['Xray',     v.xray||'n/a'],
+    ['Node.js',  v.node||'n/a'],
+    ['YT Cookies',     v.cookies        ? '✓ Present' : '✗ Missing'],
+    ['TikTok Cookies', v.tiktok_cookies ? '✓ Present' : '✗ Missing'],
+    ['KS Cookies',     v.ks_cookies     ? '✓ Set'     : '✗ Not set'],
+    ['Proxy',          v.proxy          ? '✓ Set'     : '✗ None'],
+    ['Google OAuth',   v.google_oauth   ? '✓ Set'     : '✗ Not set'],
+    ['FB Token',       v.fb_token       ? '✓ Set'     : '✗ Not set'],
+    ['Drive Folder',   v.drive_folder   || '✗ Not set'],
+  ];
+  grid.innerHTML = items.map(([name,val]) =>
+    '<div class="version-item"><div class="name">' + name + '</div>'
+    + '<div class="val" style="color:' + (val.startsWith('✓')?'var(--green)':val.startsWith('✗')?'var(--red)':'var(--text)') + '">'
+    + val + '</div></div>'
+  ).join('');
+}
+</script>
+</body>
+</html>
