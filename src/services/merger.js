@@ -875,27 +875,112 @@ function buildRankingItem(sourceMeta, index, total, ranking, thumbnailPaths) {
   };
 }
 
-// ─── Step 3: Concat all clips ─────────────────────────────────────
+// ─── Helper: get video duration via ffprobe ───────────────────────
+function getVideoDuration(filePath) {
+  try {
+    const { execSync } = require('child_process');
+    const out = execSync(
+      `ffprobe -v quiet -show_entries format=duration -of csv=p=0 "${filePath}"`,
+      { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] }
+    );
+    return parseFloat(out.toString().trim()) || 0;
+  } catch (_) { return 0; }
+}
+
+// ─── Step 3: Concat all clips with fade-to-black transition ───────
 async function concatClips(clipPaths, outputPath, jobLog) {
   if (clipPaths.length === 1) {
     fs.copyFileSync(clipPaths[0], outputPath);
     return;
   }
 
-  const concatFile = outputPath + '.concat.txt';
-  fs.writeFileSync(concatFile, clipPaths.map(p => `file '${p.replace(/'/g, "'\\''")}'`).join('\n'));
+  // Try xfade (fade-to-black) transition between clips.
+  // Falls back to simple concat if any clip is too short or ffprobe fails.
+  const FADE_DUR = 0.5; // seconds — black fade out + fade in (total 1s dark moment)
 
-  await runFFmpeg([
-    '-f', 'concat', '-safe', '0',
-    '-i', concatFile,
-    '-c:v', 'libx264', '-preset', PRESET, '-crf', CRF,
-    '-pix_fmt', 'yuv420p',
-    '-c:a', 'aac', '-b:a', '128k',
-    '-movflags', '+faststart',
-    outputPath,
-  ], jobLog, null);
+  try {
+    // Get durations for all clips
+    const durations = clipPaths.map(p => getVideoDuration(p));
+    const allValid = durations.every(d => d > FADE_DUR * 2 + 0.5);
 
-  try { fs.unlinkSync(concatFile); } catch (_) {}
+    if (!allValid) {
+      jobLog.warn('⚠️ Some clips too short for xfade — using simple concat');
+      throw new Error('clips too short');
+    }
+
+    jobLog.info(`🎬 Building xfade (fade-to-black) transition between ${clipPaths.length} clips...`);
+
+    // Build complex filter_complex for chained xfade
+    // Each clip needs: -i clip0 -i clip1 -i clip2 ...
+    // filter: [0:v]fade=out...,[1:v]fade=in..., xfade=...
+    // We use xfade=transition=fade with black as mid-point via fadeblack
+    const inputArgs = [];
+    clipPaths.forEach(p => { inputArgs.push('-i', p); });
+
+    // Build chained xfade filter
+    // offset = sum of durations up to clip i, minus fade overlap
+    let filterParts = [];
+    let audioMerge = [];
+    let offset = 0;
+
+    // Video xfade chain
+    // [0:v][1:v]xfade=transition=fadeblack:duration=1:offset=<dur0-0.5>[v01];
+    // [v01][2:v]xfade=transition=fadeblack:duration=1:offset=<dur0+dur1-1>[v012]; ...
+    let prevLabel = '[0:v]';
+    for (let i = 1; i < clipPaths.length; i++) {
+      offset += durations[i - 1] - FADE_DUR;
+      const outLabel = i === clipPaths.length - 1 ? '[vout]' : `[v${i}]`;
+      filterParts.push(
+        `${prevLabel}[${i}:v]xfade=transition=fadeblack:duration=${FADE_DUR * 2}:offset=${offset.toFixed(3)}${outLabel}`
+      );
+      prevLabel = outLabel;
+    }
+
+    // Audio: acrossfade chain — use anullsrc fallback if no audio
+    let prevALabel = '[0:a]';
+    const nullsrcInputs = [];
+    for (let i = 1; i < clipPaths.length; i++) {
+      const outALabel = i === clipPaths.length - 1 ? '[aout]' : `[a${i}]`;
+      filterParts.push(
+        `${prevALabel}[${i}:a]acrossfade=d=${FADE_DUR * 2}:c1=tri:c2=tri${outALabel}`
+      );
+      prevALabel = outALabel;
+    }
+
+    const filterComplex = filterParts.join(';');
+
+    await runFFmpeg([
+      ...inputArgs,
+      '-filter_complex', filterComplex,
+      '-map', '[vout]',
+      '-map', '[aout]',
+      '-c:v', 'libx264', '-preset', PRESET, '-crf', CRF,
+      '-pix_fmt', 'yuv420p',
+      '-c:a', 'aac', '-b:a', '128k',
+      '-movflags', '+faststart',
+      outputPath,
+    ], jobLog, null);
+
+    jobLog.info('✅ xfade transition applied successfully');
+
+  } catch (err) {
+    // Fallback: simple concat demuxer
+    jobLog.warn(`⚠️ xfade failed (${err.message}) — falling back to simple concat`);
+    const concatFile = outputPath + '.concat.txt';
+    fs.writeFileSync(concatFile, clipPaths.map(p => `file '${p.replace(/'/g, "'\\''")}'`).join('\n'));
+
+    await runFFmpeg([
+      '-f', 'concat', '-safe', '0',
+      '-i', concatFile,
+      '-c:v', 'libx264', '-preset', PRESET, '-crf', CRF,
+      '-pix_fmt', 'yuv420p',
+      '-c:a', 'aac', '-b:a', '128k',
+      '-movflags', '+faststart',
+      outputPath,
+    ], jobLog, null);
+
+    try { fs.unlinkSync(concatFile); } catch (_) {}
+  }
 }
 
 // ─── Step 4: Apply audio settings ────────────────────────────────
