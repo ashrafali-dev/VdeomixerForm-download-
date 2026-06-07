@@ -231,13 +231,16 @@ def draw_text_with_emoji(draw, x, y, text, main_font, emoji_font, fill, shadow=N
             draw.text((cx, y), seg, font=main_font, fill=fill)
         cx += rw
 
-# Load emoji font
+# Load emoji font — NotoColorEmoji must be loaded at native size (109) then scaled
+EMOJI_NATIVE_SIZE = 109
 emoji_font = None
 if emoji_font_path:
-    try:
-        emoji_font = ImageFont.truetype(emoji_font_path, font_size, layout_engine=emoji_layout)
-    except:
-        emoji_font = None
+    for ems in [EMOJI_NATIVE_SIZE, font_size, 64, 32]:
+        try:
+            emoji_font = ImageFont.truetype(emoji_font_path, ems, layout_engine=emoji_layout)
+            break
+        except:
+            continue
 
 # Colour map based on original part splits
 if part2_text:
