@@ -96,7 +96,7 @@ async function runJob(jobId) {
   fs.mkdirSync(workDir, { recursive: true });
 
   try {
-    const { sources, heading, ranking, audioOpts } = job.params;
+    const { sources, heading, ranking, audioOpts, enableTransition } = job.params;
     // sources: [ { url, rankTitle?, startTime?, endTime?, speed? }, ... ]
 
     // ── Phase 1: Download all sources ──
@@ -145,6 +145,7 @@ async function runJob(jobId) {
       ranking: ranking || null,
       audioOpts: audioOpts || { mode: 'original' },
       speeds: orderedSpeeds,
+      enableTransition: enableTransition === true,
       jobLog,
     });
 

@@ -162,4 +162,82 @@ router.post('/audio-lib', (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+
+// ── Sound Library (transition sounds) ────────────────────────────
+const SOUNDS_DIR      = path.join(path.dirname(CONFIG_FILE), 'sounds');
+const SOUNDS_META_FILE = path.join(path.dirname(CONFIG_FILE), 'sounds-meta.json');
+const soundUpload = multer({ dest: '/tmp/', limits: { fileSize: 20*1024*1024 } });
+
+function loadSoundsMeta() {
+  try { if (fs.existsSync(SOUNDS_META_FILE)) return JSON.parse(fs.readFileSync(SOUNDS_META_FILE,'utf8')); } catch(_) {}
+  return { selected: null, files: [] };
+}
+function saveSoundsMeta(meta) {
+  fs.mkdirSync(path.dirname(SOUNDS_META_FILE), { recursive: true });
+  fs.writeFileSync(SOUNDS_META_FILE, JSON.stringify(meta, null, 2));
+}
+
+// List all sounds + selected
+router.get('/sounds', (req, res) => {
+  const meta = loadSoundsMeta();
+  // verify files still exist
+  meta.files = (meta.files || []).filter(f => fs.existsSync(path.join(SOUNDS_DIR, f.filename)));
+  saveSoundsMeta(meta);
+  res.json(meta);
+});
+
+// Upload a sound file
+router.post('/sounds', soundUpload.single('sound'), (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No file' });
+    const ext = path.extname(req.file.originalname).toLowerCase() || '.mp3';
+    if (!['.mp3','.wav','.ogg','.m4a'].includes(ext))
+      return res.status(400).json({ error: 'Only mp3/wav/ogg/m4a allowed' });
+
+    fs.mkdirSync(SOUNDS_DIR, { recursive: true });
+    const filename = `sound_${Date.now()}${ext}`;
+    fs.renameSync(req.file.path, path.join(SOUNDS_DIR, filename));
+
+    const meta = loadSoundsMeta();
+    meta.files = meta.files || [];
+    meta.files.push({ filename, originalName: req.file.originalname, addedAt: Date.now() });
+    saveSoundsMeta(meta);
+    res.json({ ok: true, filename });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// Select a sound for transition
+router.post('/sounds/select', (req, res) => {
+  try {
+    const { filename } = req.body;
+    const meta = loadSoundsMeta();
+    if (filename && !meta.files.find(f => f.filename === filename))
+      return res.status(404).json({ error: 'Not found' });
+    meta.selected = filename || null;
+    saveSoundsMeta(meta);
+    res.json({ ok: true, selected: meta.selected });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// Delete a sound
+router.delete('/sounds/:filename', (req, res) => {
+  try {
+    const { filename } = req.params;
+    const meta = loadSoundsMeta();
+    const filePath = path.join(SOUNDS_DIR, filename);
+    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    meta.files = (meta.files || []).filter(f => f.filename !== filename);
+    if (meta.selected === filename) meta.selected = null;
+    saveSoundsMeta(meta);
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// Serve sound files
+router.get('/sounds/file/:filename', (req, res) => {
+  const filePath = path.join(SOUNDS_DIR, req.params.filename);
+  if (!fs.existsSync(filePath)) return res.status(404).end();
+  res.sendFile(filePath);
+});
+
 module.exports = router;

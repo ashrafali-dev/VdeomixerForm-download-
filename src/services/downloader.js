@@ -321,15 +321,14 @@ async function waitForKsApi(jobLog, maxWaitMs = 10000) {
 // Primary: KS-Downloader API
 async function downloadKuaishouViaApi(url, jobId, jobLog) {
   const ksCookies = (process.env.KS_COOKIES || '').replace(/[\r\n\t]/g, ' ').replace(/\s+/g, ' ').trim();
-  const proxy     = 'socks5://127.0.0.1:10808';
+  const proxy     = (process.env.KS_PROXY || '').trim() || null;
 
   jobLog.info('[KS] Trying KS-Downloader API...');
+  if (proxy) jobLog.info(`[KS] Using proxy: ${proxy}`);
 
-  const body = JSON.stringify({
-    text:   url,
-    cookie: ksCookies || null,
-    proxy:  proxy,
-  });
+  const bodyObj = { text: url, cookie: ksCookies || null };
+  if (proxy) bodyObj.proxy = proxy;
+  const body = JSON.stringify(bodyObj);
 
   let resp, json;
   try {
@@ -367,7 +366,8 @@ async function downloadKuaishouViaApi(url, jobId, jobLog) {
 // Fallback: GraphQL direct
 async function downloadKuaishouViaGraphQL(photoId, ksCookies, jobLog) {
   jobLog.info('[KS] Trying GraphQL fallback...');
-  const proxy = 'socks5://127.0.0.1:10808';
+  const proxy = (process.env.KS_PROXY || '').trim() || null;
+  if (proxy) jobLog.info(`[KS-GQL] Using proxy: ${proxy}`);
 
   const payload = JSON.stringify({
     operationName: 'visionVideoDetail',
@@ -377,7 +377,7 @@ async function downloadKuaishouViaGraphQL(photoId, ksCookies, jobLog) {
 
   const curlArgs = [
     '-s', '--max-time', '45', '--connect-timeout', '15',
-    '-x', proxy,
+    ...(proxy ? ['-x', proxy] : []),
     '-X', 'POST', 'https://www.kuaishou.com/graphql',
     '-H', 'Content-Type: application/json',
     '-H', `Cookie: ${ksCookies}`,

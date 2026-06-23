@@ -6,7 +6,7 @@ const { createJob, getJob, deleteJob, listJobs } = require('../services/jobManag
 // POST /api/mixer/jobs — create new job
 router.post('/jobs', (req, res) => {
   try {
-    const { sources, heading, ranking, audioOpts } = req.body;
+    const { sources, heading, ranking, audioOpts, enableTransition } = req.body;
     if (!Array.isArray(sources) || sources.length === 0)
       return res.status(400).json({ error: 'sources[] required' });
     if (sources.length > 10)
@@ -19,7 +19,7 @@ router.post('/jobs', (req, res) => {
       const m = s.url.trim().match(/https?:\/\/[^\s"'<>]+/);
       s.url = m ? m[0] : s.url.trim();
     }
-    const jobId = createJob({ sources, heading, ranking, audioOpts });
+    const jobId = createJob({ sources, heading, ranking, audioOpts, enableTransition: enableTransition === true });
     res.json({ jobId });
   } catch (e) {
     res.status(500).json({ error: e.message });

@@ -13,6 +13,20 @@ const fs    = require('fs');
 const https = require('https');
 const { renderTitlePng } = require('./titleRenderer');
 
+const DATA_DIR_M        = process.env.DATA_DIR || '/app/data';
+const SOUNDS_DIR_M      = path.join(DATA_DIR_M, 'sounds');
+const SOUNDS_META_FILE_M = path.join(DATA_DIR_M, 'sounds-meta.json');
+
+function getSelectedSound() {
+  try {
+    if (!fs.existsSync(SOUNDS_META_FILE_M)) return null;
+    const meta = JSON.parse(fs.readFileSync(SOUNDS_META_FILE_M, 'utf8'));
+    if (!meta.selected) return null;
+    const filePath = path.join(SOUNDS_DIR_M, meta.selected);
+    return fs.existsSync(filePath) ? filePath : null;
+  } catch(_) { return null; }
+}
+
 function hexToRgba(hex) {
   try {
     hex = hex.replace('#', '');
@@ -218,7 +232,9 @@ async function addHeading(inputPath, outputPath, heading, jobLog) {
 
   try {
     // heading opts from UI
-    const showBg      = heading?.showBg !== false;  // default true
+    const showBg      = heading?.showBg === true;  // default false — only show if explicitly enabled
+    const fgHex       = heading?.color || null;
+    const fgColor     = fgHex ? hexToRgba(fgHex) : [255, 255, 255, 255];
     const accentHex   = heading?.accentColor || null;
     const accentColor = accentHex ? hexToRgba(accentHex) : null;
 
@@ -233,12 +249,13 @@ async function addHeading(inputPath, outputPath, heading, jobLog) {
       paddingY: 18,
       lineHeightRatio: 1.22,
       outPath: titlePng,
-      fg: [255, 255, 255, 255],
-      bg: [0, 0, 0, 145],
-      shadow: showBg ? [0, 0, 0, 180, 2, 2] : null,
+      fg: fgColor,
+      bg: showBg ? [0, 0, 0, 145] : [0, 0, 0, 0],
+      shadow: showBg ? [0, 0, 0, 180, 2, 2] : [0, 0, 0, 160, 2, 2],
       fontWeight: 'bold',
       showBg,
       accentColor,
+      emojiFont: pickEmojiFont(),
     });
 
     await runFFmpeg([
@@ -293,13 +310,8 @@ def _detect_layout(fp):
     if raqm is None:
         return basic
     try:
-        f = ImageFont.truetype(fp, 20, layout_engine=raqm)
-        tmp = Image.new('RGBA', (200, 40))
-        d   = ImageDraw.Draw(tmp)
-        bb  = d.textbbox((0, 0), '\u09ac\u09be\u0982\u09b2\u09be', font=f)
-        if bb[2] - bb[0] < 120:
-            return raqm
-        return basic
+        ImageFont.truetype(fp, 20, layout_engine=raqm)
+        return raqm
     except Exception:
         return basic
 
@@ -377,40 +389,57 @@ def draw_text_with_outline(draw, cx, y, seq, font, fill):
                 draw.text((cx + dx, y + dy), seq, font=font, fill=(0, 0, 0, 255))
     draw.text((cx, y), seq, font=font, fill=fill)
 
+def has_emoji(text):
+    return any(is_emoji(c) for c in text)
+
 def draw_text_with_emoji(draw, x, y, text, main_font, emoji_font_obj, fill, use_outline=True):
+    # No emoji — draw whole text at once (correct Bengali shaping)
+    if not emoji_font_obj or not has_emoji(text):
+        if use_outline:
+            draw_text_with_outline(draw, x, y, text, main_font, fill)
+        else:
+            draw.text((x, y), text, font=main_font, fill=fill)
+        return
+
     try:
         sample_bb = draw.textbbox((0,0), 'A', font=main_font)
         target_h = max(16, sample_bb[3] - sample_bb[1])
     except Exception:
         target_h = 32
-    cx = x
+
+    # Build runs of (segment, is_emoji)
+    runs = []
     i = 0
     while i < len(text):
         ch = text[i]
-        seq = ch
-        j = i + 1
-        while j < len(text) and text[j] in ('\uFE0F', '\u200D'):
-            seq += text[j]
-            j += 1
-        if j < len(text) and is_emoji(text[j]) and '\u200D' in seq:
-            while j < len(text) and (text[j] in ('\uFE0F', '\u200D') or is_emoji(text[j])):
-                seq += text[j]
+        if is_emoji(ch):
+            seq = ch; j = i + 1
+            while j < len(text) and text[j] in ('\uFE0F', '\u200D'):
+                seq += text[j]; j += 1
+            if j < len(text) and is_emoji(text[j]) and '\u200D' in seq:
+                while j < len(text) and (text[j] in ('\uFE0F','\u200D') or is_emoji(text[j])):
+                    seq += text[j]; j += 1
+            runs.append((seq, True)); i = j
+        else:
+            j = i + 1
+            while j < len(text) and not is_emoji(text[j]):
                 j += 1
-        use_emoji = emoji_font_obj and any(is_emoji(c) for c in seq)
-        if use_emoji:
-            emoji_img, ew = render_emoji_to_img(seq, target_h, emoji_font_obj)
+            runs.append((text[i:j], False)); i = j
+
+    cx = x
+    for seg, is_emj in runs:
+        if is_emj:
+            emoji_img, ew = render_emoji_to_img(seg, target_h, emoji_font_obj)
             if emoji_img:
                 draw._image.paste(emoji_img, (int(cx), int(y-4)), emoji_img)
                 cx += ew + 4
-                i = j
-                continue
-        if use_outline:
-            draw_text_with_outline(draw, cx, y, seq, main_font, fill)
         else:
-            draw.text((cx, y), seq, font=main_font, fill=fill)
-        bb = draw.textbbox((0, 0), seq, font=main_font)
-        cx += bb[2] - bb[0] + 1
-        i = j
+            if use_outline:
+                draw_text_with_outline(draw, cx, y, seg, main_font, fill)
+            else:
+                draw.text((cx, y), seg, font=main_font, fill=fill)
+            bb = draw.textbbox((0,0), seg, font=main_font)
+            cx += bb[2] - bb[0]
 
 def wrap_text_px(text, font, max_w):
     tmp_img = Image.new('RGBA', (max_w * 2 + 100, 100))
@@ -509,36 +538,6 @@ if preset == 'current_badge':
         for line in lines:
             draw_text_with_emoji(draw, 165, ty, line, badge_title_font, badge_emoji_font, white, use_outline=True)
             ty += 56
-else:
-    list_top = title_bottom_y + 14
-    start_y = list_top + (110 if total_ranks <= 5 else 90)
-    gap = 75 if total_ranks <= 5 else 60
-    
-    tmp_measure = Image.new('RGBA', (200, 100))
-    tmp_d = ImageDraw.Draw(tmp_measure)
-    max_num_w = 0
-    for r in range(1, total_ranks + 1):
-        f_ = active_num_font if r == current_rank else num_font
-        bb_ = tmp_d.textbbox((0, 0), f'{r}.', font=f_)
-        max_num_w = max(max_num_w, bb_[2] - bb_[0])
-    num_x = 32
-    title_x = num_x + max_num_w + 16
-
-    for rank in range(1, total_ranks + 1):
-        y = start_y + (rank - 1) * gap
-        is_active = rank == current_rank
-        font = active_num_font if is_active else num_font
-        color_idx = (rank - 1) % len(list_colors)
-        num_fill = list_colors[color_idx]
-        
-        draw_text_with_emoji(draw, num_x, y, f'{rank}.', font, emoji_font, num_fill, use_outline=True)
-        if is_active and title:
-            lines = wrap_text_px(title, active_title_font, W - title_x - 16)[:2]
-            ty = y + 15
-            for line in lines:
-                draw_text_with_emoji(draw, title_x, ty, line, active_title_font, emoji_font, white, use_outline=True)
-                ty += 40
-
 elif preset == 'pro_ranking':
     # ── Pro Ranking Overlay ──────────────────────────────────────────
     # thumbnail_paths: list of image paths, one per rank (may be empty strings)
@@ -570,11 +569,11 @@ elif preset == 'pro_ranking':
     accent_glow = (accent_rgba[0], accent_rgba[1], accent_rgba[2], 60)
 
     # ── Font sizes ───────────────────────────────────────────────────
-    pro_gt_size   = 46
-    pro_num_size  = 54
-    pro_act_size  = 62
-    pro_ttl_size  = 28
-    pro_act_ttl_size = 34
+    pro_gt_size   = 40
+    pro_num_size  = 42
+    pro_act_size  = 50
+    pro_ttl_size  = 22
+    pro_act_ttl_size = 28
 
     pro_num_font     = ImageFont.truetype(font_path, pro_num_size,     layout_engine=layout)
     pro_act_num_font = ImageFont.truetype(font_path, pro_act_size,     layout_engine=layout)
@@ -644,13 +643,13 @@ elif preset == 'pro_ranking':
     title_bottom_y = strip_bottom + 12
 
     # ── Rank rows ────────────────────────────────────────────────────
-    THUMB_W   = 72          # 9:16 ratio → 72x128
+    THUMB_W   = 72
     THUMB_H   = 128
-    THUMB_R   = 6           # slight corner rounding only
+    THUMB_R   = 6
     ROW_PAD_X = 16
-    ROW_H_ACTIVE = 148
-    ROW_H_NORMAL = 96
-    GAP          = 8
+    ROW_H_ACTIVE = 118
+    ROW_H_NORMAL = 78
+    GAP          = 6
 
     # compute total height needed
     total_row_h = 0
@@ -667,21 +666,15 @@ elif preset == 'pro_ranking':
         color_idx  = (rank-1) % len(list_colors)
         rank_color = list_colors[color_idx]
 
-        # Row background
-        row_bg_alpha = 160 if is_active else 90
-        row_bg_color = (accent_rgba[0], accent_rgba[1], accent_rgba[2], 40) if is_active else (0,0,0, row_bg_alpha)
-        row_rect = [(ROW_PAD_X, cy_row), (W - ROW_PAD_X, cy_row + row_h)]
-
-        # draw row bg
+        # Row background — only active row gets highlight
         row_layer = Image.new('RGBA', (W, H), (0,0,0,0))
         row_draw  = ImageDraw.Draw(row_layer)
-        row_draw.rounded_rectangle(
-            [ROW_PAD_X, cy_row, W-ROW_PAD_X, cy_row+row_h],
-            radius=18,
-            fill=row_bg_color
-        )
         if is_active:
-            # accent left border glow
+            row_draw.rounded_rectangle(
+                [ROW_PAD_X, cy_row, W-ROW_PAD_X, cy_row+row_h],
+                radius=18,
+                fill=(accent_rgba[0], accent_rgba[1], accent_rgba[2], 40)
+            )
             row_draw.rounded_rectangle(
                 [ROW_PAD_X, cy_row, ROW_PAD_X+6, cy_row+row_h],
                 radius=4, fill=(accent_rgba[0], accent_rgba[1], accent_rgba[2], 230)
@@ -765,6 +758,36 @@ elif preset == 'pro_ranking':
 
         cy_row += row_h + GAP
 
+else:
+    list_top = title_bottom_y + 14
+    start_y = list_top + (110 if total_ranks <= 5 else 90)
+    gap = 75 if total_ranks <= 5 else 60
+
+    tmp_measure = Image.new('RGBA', (200, 100))
+    tmp_d = ImageDraw.Draw(tmp_measure)
+    max_num_w = 0
+    for r in range(1, total_ranks + 1):
+        f_ = active_num_font if r == current_rank else num_font
+        bb_ = tmp_d.textbbox((0, 0), f'{r}.', font=f_)
+        max_num_w = max(max_num_w, bb_[2] - bb_[0])
+    num_x = 32
+    title_x = num_x + max_num_w + 16
+
+    for rank in range(1, total_ranks + 1):
+        y = start_y + (rank - 1) * gap
+        is_active = rank == current_rank
+        font = active_num_font if is_active else num_font
+        color_idx = (rank - 1) % len(list_colors)
+        num_fill = list_colors[color_idx]
+
+        draw_text_with_emoji(draw, num_x, y, f'{rank}.', font, emoji_font, num_fill, use_outline=True)
+        if is_active and title:
+            lines = wrap_text_px(title, active_title_font, W - title_x - 16)[:2]
+            ty = y + 15
+            for line in lines:
+                draw_text_with_emoji(draw, title_x, ty, line, active_title_font, emoji_font, white, use_outline=True)
+                ty += 40
+
 img.save(cfg['out'])
 print('OK')
 `;
@@ -801,6 +824,7 @@ async function extractThumbnail(videoPath, outJpg, jobLog) {
       '-i', videoPath,
       '-vframes', '1',
       '-vf', `scale=${Math.round(VIDEO_W * 0.22)}:-1`,
+      '-update', '1',
       '-q:v', '3',
       outJpg,
     ], jobLog, null);
@@ -877,27 +901,174 @@ function buildRankingItem(sourceMeta, index, total, ranking, thumbnailPaths) {
   };
 }
 
-// ─── Step 3: Concat all clips ─────────────────────────────────────
-async function concatClips(clipPaths, outputPath, jobLog) {
+// ─── Helper: get video duration via ffprobe ───────────────────────
+function getVideoDuration(filePath) {
+  try {
+    const { execSync } = require('child_process');
+    const out = execSync(
+      `ffprobe -v quiet -show_entries format=duration -of csv=p=0 "${filePath}"`,
+      { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] }
+    );
+    return parseFloat(out.toString().trim()) || 0;
+  } catch (_) { return 0; }
+}
+
+// ─── Step 3: Concat all clips with fade-to-black transition ───────
+async function concatClips(clipPaths, outputPath, jobLog, useTransition = false) {
   if (clipPaths.length === 1) {
     fs.copyFileSync(clipPaths[0], outputPath);
     return;
   }
 
-  const concatFile = outputPath + '.concat.txt';
-  fs.writeFileSync(concatFile, clipPaths.map(p => `file '${p.replace(/'/g, "'\\''")}'`).join('\n'));
+  // If transition not requested, use simple concat directly
+  if (!useTransition) {
+    const concatFile = outputPath + '.concat.txt';
+    fs.writeFileSync(concatFile, clipPaths.map(p => `file '${p.replace(/'/g, "'\\''")}'`).join('\n'));
+    await runFFmpeg([
+      '-f', 'concat', '-safe', '0',
+      '-i', concatFile,
+      '-c:v', 'libx264', '-preset', PRESET, '-crf', CRF,
+      '-pix_fmt', 'yuv420p',
+      '-c:a', 'aac', '-b:a', '128k',
+      '-movflags', '+faststart',
+      outputPath,
+    ], jobLog, null);
+    try { fs.unlinkSync(concatFile); } catch (_) {}
+    return;
+  }
 
-  await runFFmpeg([
-    '-f', 'concat', '-safe', '0',
-    '-i', concatFile,
-    '-c:v', 'libx264', '-preset', PRESET, '-crf', CRF,
-    '-pix_fmt', 'yuv420p',
-    '-c:a', 'aac', '-b:a', '128k',
-    '-movflags', '+faststart',
-    outputPath,
-  ], jobLog, null);
+  // Try xfade (fade-to-black) transition between clips.
+  // Falls back to simple concat if any clip is too short or ffprobe fails.
+  const FADE_DUR = 0.5; // seconds — black fade out + fade in (total 1s dark moment)
 
-  try { fs.unlinkSync(concatFile); } catch (_) {}
+  try {
+    // Get durations for all clips
+    const durations = clipPaths.map(p => getVideoDuration(p));
+    const allValid = durations.every(d => d > FADE_DUR * 2 + 0.5);
+
+    if (!allValid) {
+      jobLog.warn('⚠️ Some clips too short for xfade — using simple concat');
+      throw new Error('clips too short');
+    }
+
+    jobLog.info(`🎬 Building xfade (fade-to-black) transition between ${clipPaths.length} clips...`);
+
+    // Build complex filter_complex for chained xfade
+    // Each clip needs: -i clip0 -i clip1 -i clip2 ...
+    // filter: [0:v]fade=out...,[1:v]fade=in..., xfade=...
+    // We use xfade=transition=fade with black as mid-point via fadeblack
+    const inputArgs = [];
+    clipPaths.forEach(p => { inputArgs.push('-i', p); });
+
+    // Build chained xfade filter
+    // offset = sum of durations up to clip i, minus fade overlap
+    let filterParts = [];
+    let audioMerge = [];
+    let offset = 0;
+
+    // Video xfade chain
+    // [0:v][1:v]xfade=transition=fadeblack:duration=1:offset=<dur0-0.5>[v01];
+    // [v01][2:v]xfade=transition=fadeblack:duration=1:offset=<dur0+dur1-1>[v012]; ...
+    let prevLabel = '[0:v]';
+    for (let i = 1; i < clipPaths.length; i++) {
+      offset += durations[i - 1] - FADE_DUR;
+      const outLabel = i === clipPaths.length - 1 ? '[vout]' : `[v${i}]`;
+      filterParts.push(
+        `${prevLabel}[${i}:v]xfade=transition=fadeblack:duration=${FADE_DUR * 2}:offset=${offset.toFixed(3)}${outLabel}`
+      );
+      prevLabel = outLabel;
+    }
+
+    // Audio: acrossfade chain — use anullsrc fallback if no audio
+    let prevALabel = '[0:a]';
+    const nullsrcInputs = [];
+    for (let i = 1; i < clipPaths.length; i++) {
+      const outALabel = i === clipPaths.length - 1 ? '[aout]' : `[a${i}]`;
+      filterParts.push(
+        `${prevALabel}[${i}:a]acrossfade=d=${FADE_DUR * 2}:c1=tri:c2=tri${outALabel}`
+      );
+      prevALabel = outALabel;
+    }
+
+    const filterComplex = filterParts.join(';');
+
+    await runFFmpeg([
+      ...inputArgs,
+      '-filter_complex', filterComplex,
+      '-map', '[vout]',
+      '-map', '[aout]',
+      '-c:v', 'libx264', '-preset', PRESET, '-crf', CRF,
+      '-pix_fmt', 'yuv420p',
+      '-c:a', 'aac', '-b:a', '128k',
+      '-movflags', '+faststart',
+      outputPath,
+    ], jobLog, null);
+
+    jobLog.info('✅ xfade transition applied successfully');
+
+    // Mix transition sound effect if selected
+    const soundFile = getSelectedSound();
+    if (soundFile) {
+      jobLog.info('🔊 Mixing transition sound...');
+      const soundedPath = outputPath + '_sounded.mp4';
+      try {
+        // Get total video duration for sound timing
+        const totalDur = durations.reduce((a, b) => a + b, 0);
+        // Build amix filter: original audio + sound at each transition point
+        let soundInputs = ['-i', outputPath, '-i', soundFile];
+        let soundFilter = '[0:a]';
+        // For each transition point, adelay the sound
+        let soundParts = ['[0:a]'];
+        let soundLabels = [];
+        let offset2 = 0;
+        for (let i = 1; i < clipPaths.length; i++) {
+          offset2 += durations[i-1] - FADE_DUR;
+          const delayMs = Math.round(offset2 * 1000);
+          const sLabel = `[s${i}]`;
+          soundParts.push(`[1:a]adelay=${delayMs}|${delayMs}${sLabel}`);
+          soundLabels.push(sLabel);
+        }
+        const allAudio = ['[0:a]', ...soundLabels];
+        soundParts.push(`${allAudio.join('')}amix=inputs=${allAudio.length}:normalize=0[amixed]`);
+
+        await runFFmpeg([
+          '-i', outputPath,
+          '-i', soundFile,
+          '-filter_complex', soundParts.join(';'),
+          '-map', '0:v',
+          '-map', '[amixed]',
+          '-c:v', 'copy',
+          '-c:a', 'aac', '-b:a', '128k',
+          '-shortest',
+          soundedPath,
+        ], jobLog, null);
+
+        fs.renameSync(soundedPath, outputPath);
+        jobLog.info('✅ Transition sound mixed in');
+      } catch(se) {
+        jobLog.warn('⚠️ Sound mix failed: ' + se.message);
+        try { if (fs.existsSync(soundedPath)) fs.unlinkSync(soundedPath); } catch(_) {}
+      }
+    }
+
+  } catch (err) {
+    // Fallback: simple concat demuxer
+    jobLog.warn(`⚠️ xfade failed (${err.message}) — falling back to simple concat`);
+    const concatFile = outputPath + '.concat.txt';
+    fs.writeFileSync(concatFile, clipPaths.map(p => `file '${p.replace(/'/g, "'\\''")}'`).join('\n'));
+
+    await runFFmpeg([
+      '-f', 'concat', '-safe', '0',
+      '-i', concatFile,
+      '-c:v', 'libx264', '-preset', PRESET, '-crf', CRF,
+      '-pix_fmt', 'yuv420p',
+      '-c:a', 'aac', '-b:a', '128k',
+      '-movflags', '+faststart',
+      outputPath,
+    ], jobLog, null);
+
+    try { fs.unlinkSync(concatFile); } catch (_) {}
+  }
 }
 
 // ─── Step 4: Apply audio settings ────────────────────────────────
@@ -966,7 +1137,7 @@ async function applyAudio(inputPath, outputPath, audioOpts, workDir, jobLog) {
 }
 
 // ─── Main merge pipeline ──────────────────────────────────────────
-async function mergeVideos({ videoFiles, sourcesMeta = [], workDir, jobId, heading, ranking, audioOpts, jobLog, speeds = [] }) {
+async function mergeVideos({ videoFiles, sourcesMeta = [], workDir, jobId, heading, ranking, audioOpts, jobLog, speeds = [], enableTransition = false }) {
   fs.mkdirSync(workDir, { recursive: true });
   fs.mkdirSync(OUTPUT_DIR, { recursive: true });
 
@@ -990,10 +1161,19 @@ async function mergeVideos({ videoFiles, sourcesMeta = [], workDir, jobId, headi
   let thumbnailPaths = [];
   if (ranking && ranking.enabled && ranking.preset === 'pro_ranking') {
     jobLog.info(`🖼️ Extracting thumbnails for Pro Ranking...`);
-    for (let i = 0; i < croppedPaths.length; i++) {
+    const total = croppedPaths.length;
+    // extract thumbnails indexed by clip
+    const rawThumbs = [];
+    for (let i = 0; i < total; i++) {
       const thumbOut = path.join(workDir, `thumb_${i}.jpg`);
       const tp = await extractThumbnail(croppedPaths[i], thumbOut, jobLog);
-      thumbnailPaths.push(tp);
+      rawThumbs.push(tp);
+    }
+    // reorder by rank: thumbnailPaths[rank-1] = clip thumbnail for that rank
+    thumbnailPaths = new Array(total).fill('');
+    for (let i = 0; i < total; i++) {
+      const rank = computeRankForIndex(i, total, ranking);
+      thumbnailPaths[rank - 1] = rawThumbs[i];
     }
   }
 
@@ -1015,7 +1195,9 @@ async function mergeVideos({ videoFiles, sourcesMeta = [], workDir, jobId, headi
 
   const concatPath = path.join(workDir, 'concat.mp4');
   jobLog.info(`🔗 Concatenating ${headedPaths.length} clips...`);
-  await concatClips(headedPaths, concatPath, jobLog);
+  const isPro = ranking && ranking.enabled && ranking.preset === 'pro_ranking';
+  const useTransition = enableTransition && !isPro;
+  await concatClips(headedPaths, concatPath, jobLog, useTransition);
   progress();
 
   const timestamp = Date.now();

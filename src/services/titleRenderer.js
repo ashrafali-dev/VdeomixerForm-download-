@@ -58,13 +58,9 @@ def _detect_layout(fp):
     if raqm is None:
         return basic
     try:
-        f = ImageFont.truetype(fp, 20, layout_engine=raqm)
-        tmp = Image.new('RGBA', (200, 40))
-        d   = ImageDraw.Draw(tmp)
-        bb  = d.textbbox((0, 0), '\u09ac\u09be\u0982\u09b2\u09be', font=f)
-        if bb[2] - bb[0] < 120:
-            return raqm
-        return basic
+        # Just test if raqm engine loads successfully — don't check width
+        ImageFont.truetype(fp, 20, layout_engine=raqm)
+        return raqm
     except:
         return basic
 
@@ -144,77 +140,107 @@ def is_emoji(ch):
         return False
 
 def render_emoji_to_img(seq, target_h, emoji_font_obj):
-    try:
-        kwargs = {'embedded_color': True} if hasattr(ImageFont, 'Layout') else {}
-        tmp_d = ImageDraw.Draw(Image.new('RGBA',(10,10)))
-        bb = tmp_d.textbbox((0,0), seq, font=emoji_font_obj, **kwargs)
+    for use_ec in [True, False]:
+        try:
+            kwargs = {'embedded_color': True} if use_ec else {}
+            tmp_d = ImageDraw.Draw(Image.new('RGBA',(10,10)))
+            bb = tmp_d.textbbox((0,0), seq, font=emoji_font_obj, **kwargs)
+            ew = max(1, bb[2]-bb[0])
+            eh = max(1, bb[3]-bb[1])
+            if ew < 2 or eh < 2:
+                continue
+            tmp_e = Image.new('RGBA', (ew + 20, eh + 20), (0,0,0,0))
+            de = ImageDraw.Draw(tmp_e)
+            de.text((-bb[0]+10, -bb[1]+10), seq, font=emoji_font_obj, **kwargs)
+            scale = target_h / max(1, eh)
+            new_w = max(1, int(ew * scale))
+            resample = Image.Resampling.LANCZOS if hasattr(Image, 'Resampling') else Image.LANCZOS
+            return tmp_e.resize((new_w + 20, int(target_h) + 20), resample), new_w
+        except:
+            continue
+    return None, 0
 
-        ew = max(1, bb[2]-bb[0])
-        eh = max(1, bb[3]-bb[1])
-        tmp_e = Image.new('RGBA', (ew + 20, eh + 20), (0,0,0,0))
-        de = ImageDraw.Draw(tmp_e)
-        de.text((-bb[0]+10, -bb[1]+10), seq, font=emoji_font_obj, **kwargs)
-
-        scale = target_h / max(1, eh)
-        new_w = max(1, int(ew * scale))
-        new_h = max(1, int(target_h))
-        resample = Image.Resampling.LANCZOS if hasattr(Image, 'Resampling') else Image.LANCZOS
-        return tmp_e.resize((new_w + 20, new_h + 20), resample), new_w
-    except:
-        return None, 0
+def has_emoji(text):
+    return any(is_emoji(c) for c in text)
 
 def draw_text_with_emoji(draw, x, y, text, main_font, emoji_font, fill, shadow=None):
+    # If no emoji at all, draw the whole line at once (best for Bengali shaping)
+    if not emoji_font or not has_emoji(text):
+        if shadow:
+            sr, sg, sb, sa, sox, soy = shadow
+            draw.text((x + sox, y + soy), text, font=main_font, fill=(sr, sg, sb, sa))
+        draw.text((x, y), text, font=main_font, fill=fill)
+        return
+
+    # Has emoji: split into runs of (text_segment, is_emoji_seq)
     try:
         sample_bb = draw.textbbox((0,0), 'A', font=main_font)
         target_h = max(16, sample_bb[3] - sample_bb[1])
     except:
         target_h = 32
 
-    cx = x
+    # Build runs
+    runs = []
     i = 0
     while i < len(text):
         ch = text[i]
-        seq = ch
-        j = i + 1
-        while j < len(text) and text[j] in ('\uFE0F', '\u200D'):
-            seq += text[j]
-            j += 1
-        if j < len(text) and is_emoji(text[j]) and '\u200D' in seq:
-            while j < len(text) and (text[j] in ('\uFE0F', '\u200D') or is_emoji(text[j])):
-                seq += text[j]
+        if is_emoji(ch):
+            seq = ch
+            j = i + 1
+            while j < len(text) and text[j] in ('\uFE0F', '\u200D'):
+                seq += text[j]; j += 1
+            if j < len(text) and is_emoji(text[j]) and '\u200D' in seq:
+                while j < len(text) and (text[j] in ('\uFE0F','\u200D') or is_emoji(text[j])):
+                    seq += text[j]; j += 1
+            runs.append((seq, True)); i = j
+        else:
+            j = i + 1
+            while j < len(text) and not is_emoji(text[j]):
                 j += 1
-        use_emoji = emoji_font and any(is_emoji(c) for c in seq)
-        if use_emoji:
-            emoji_img, ew = render_emoji_to_img(seq, target_h, emoji_font)
+            runs.append((text[i:j], False)); i = j
+
+    # Measure each run to get x positions, then draw
+    # First pass: measure widths
+    run_widths = []
+    for seg, is_emj in runs:
+        if is_emj:
+            _, ew = render_emoji_to_img(seg, target_h, emoji_font)
+            run_widths.append(ew + 4)
+        else:
+            bb = draw.textbbox((0,0), seg, font=main_font)
+            run_widths.append(bb[2] - bb[0])
+
+    # Second pass: draw
+    cx = x
+    for (seg, is_emj), rw in zip(runs, run_widths):
+        if is_emj:
+            emoji_img, ew = render_emoji_to_img(seg, target_h, emoji_font)
             if emoji_img:
-                paste_x = int(cx)
-                paste_y = int(y - 4)
+                paste_x = int(cx); paste_y = int(y - 4)
                 if shadow:
                     sr, sg, sb, sa, sox, soy = shadow
-                    r, g, b, a_ch = emoji_img.split()
-                    shadow_layer = Image.new('RGBA', emoji_img.size, (0,0,0,0))
-                    shadow_layer.paste((sr, sg, sb, sa), mask=a_ch)
-                    img.paste(shadow_layer, (paste_x + sox, paste_y + soy), shadow_layer)
+                    r2, g2, b2, a_ch = emoji_img.split()
+                    sl = Image.new('RGBA', emoji_img.size, (0,0,0,0))
+                    sl.paste((sr,sg,sb,sa), mask=a_ch)
+                    img.paste(sl, (paste_x+sox, paste_y+soy), sl)
                 img.paste(emoji_img, (paste_x, paste_y), emoji_img)
-                cx += ew + 4
-                i = j
-                continue
-        # Regular text
-        if shadow:
-            sr, sg, sb, sa, sox, soy = shadow
-            draw.text((cx + sox, y + soy), seq, font=main_font, fill=(sr, sg, sb, sa))
-        draw.text((cx, y), seq, font=main_font, fill=fill)
-        bb = draw.textbbox((0, 0), seq, font=main_font)
-        cx += bb[2] - bb[0] + 1
-        i = j
+        else:
+            if shadow:
+                sr, sg, sb, sa, sox, soy = shadow
+                draw.text((cx+sox, y+soy), seg, font=main_font, fill=(sr,sg,sb,sa))
+            draw.text((cx, y), seg, font=main_font, fill=fill)
+        cx += rw
 
-# Load emoji font
+# Load emoji font — NotoColorEmoji must be loaded at native size (109) then scaled
+EMOJI_NATIVE_SIZE = 109
 emoji_font = None
 if emoji_font_path:
-    try:
-        emoji_font = ImageFont.truetype(emoji_font_path, font_size, layout_engine=emoji_layout)
-    except:
-        emoji_font = None
+    for ems in [EMOJI_NATIVE_SIZE, font_size, 64, 32]:
+        try:
+            emoji_font = ImageFont.truetype(emoji_font_path, ems, layout_engine=emoji_layout)
+            break
+        except:
+            continue
 
 # Colour map based on original part splits
 if part2_text:
@@ -243,3 +269,58 @@ for i, ln in enumerate(lines):
 img.save(out_path)
 print('OK', img.size, 'lines=', len(lines), 'final_font=', used_size)
 `;
+
+// ফন্ট সিলেক্টর ফাংশন (FONT_DIR ব্যবহার করে)
+function pickBengaliFontTR(weight) {
+  const fonts = {
+    bold: [
+      path.join(FONT_DIR, 'HindSiliguri-Bold.ttf'),
+      path.join(FONT_DIR, 'NotoSansBengali-Bold.ttf'),
+    ],
+    regular: [
+      path.join(FONT_DIR, 'HindSiliguri-Regular.ttf'),
+      path.join(FONT_DIR, 'NotoSansBengali-Regular.ttf'),
+    ],
+  };
+  const list = fonts[weight] || fonts.bold;
+  for (const f of list) if (fs.existsSync(f)) return f;
+  return '/usr/share/fonts/truetype/freefont/FreeSans.ttf';
+}
+
+function pickEmojiFontTR() {
+  const candidates = [
+    '/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf',
+    '/usr/share/fonts/noto/NotoColorEmoji.ttf',
+  ];
+  for (const f of candidates) if (fs.existsSync(f)) return f;
+  return null;
+}
+
+function renderTitlePng(opts) {
+  const cfg = {
+    text: opts.text || '',
+    width: opts.width,
+    height: opts.height,
+    font_size: opts.fontSize || 52,
+    min_font_size: opts.minFontSize || 20,
+    max_lines: opts.maxLines || 4,
+    padding_x: opts.paddingX || 28,
+    padding_y: opts.paddingY || 18,
+    line_height_ratio: opts.lineHeightRatio || 1.22,
+    out: opts.outPath,
+    font_path: pickBengaliFontTR(opts.fontWeight || 'bold'),
+    emoji_font_path: opts.emojiFont || pickEmojiFontTR(),
+    fg: opts.fg || [255, 255, 255, 255],
+    bg: opts.bg || [0, 0, 0, 0],
+    shadow: opts.shadow || null,
+    accent_color: opts.accentColor || null,
+    align: opts.align || 'center',
+  };
+
+  // spawnSync ইতিমধ্যেই উপরে import করা
+  const r = spawnSync('python3', ['-c', PY_RENDERER, JSON.stringify(cfg)], { encoding: 'utf8' });
+  if (r.status !== 0) throw new Error(`titleRenderer failed: ${r.stderr || r.stdout}`);
+  if (!fs.existsSync(opts.outPath)) throw new Error('title PNG not created');
+}
+
+module.exports = { renderTitlePng };

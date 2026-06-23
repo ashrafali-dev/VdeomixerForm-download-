@@ -343,6 +343,17 @@ textarea { resize: vertical; min-height: 70px; }
     </div>
   </div>
 
+  <div class="card" style="padding:12px 14px">
+    <div class="card-title">🎬 Transition</div>
+    <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
+      <input type="checkbox" id="enableTransition" style="width:16px;height:16px;accent-color:var(--accent2)">
+      <div>
+        <div style="font-size:14px;color:var(--text)">Fade-to-black transition</div>
+        <div style="font-size:11px;color:var(--muted)">ক্লিপের মাঝে ১ সেকেন্ড অন্ধকার — সাধারণ ও গ্লোবাল মোডে কাজ করে</div>
+      </div>
+    </label>
+  </div>
+
   <button class="btn btn-primary" id="startBtn" onclick="startJob()" style="width:100%;padding:14px;font-size:16px">
     ▶ Start Processing
   </button>
@@ -397,6 +408,47 @@ textarea { resize: vertical; min-height: 70px; }
       <button class="btn btn-outline" id="uploadFbBtn" onclick="uploadFacebook()" style="background:#1877f2;color:white;border-color:#1877f2">📘 Facebook</button>
       <button class="btn btn-outline" id="uploadTtBtn" onclick="uploadTikTok()" style="background:#010101;color:white;border-color:#333">🎵 TikTok</button>
       <button class="btn btn-outline" id="uploadIgBtn" onclick="uploadInstagram()" style="background:linear-gradient(45deg,#f09433,#dc2743,#bc1888);color:white;border:none">📸 Instagram</button>
+      <button class="btn btn-outline" id="uploadTgBtn" onclick="uploadTelegram()" style="background:#229ED9;color:white;border-color:#1a8bbf">✈️ Telegram</button>
+    </div>
+
+    <!-- Telegram upload modal -->
+    <div id="tgUploadModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:999;align-items:center;justify-content:center">
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:24px;width:90%;max-width:420px">
+        <div style="font-weight:700;font-size:16px;margin-bottom:16px">✈️ Telegram এ পাঠাও</div>
+
+        <!-- Channel selector -->
+        <div class="settings-row" style="margin-bottom:10px">
+          <label style="font-size:12px;color:var(--muted);margin-bottom:4px;display:block">চ্যানেল বেছে নাও</label>
+          <select id="tgChannelSelect" style="width:100%;background:var(--bg);color:var(--text);border:1px solid var(--border);padding:6px 10px;border-radius:6px;margin-bottom:6px">
+            <option value="">-- চ্যানেল নেই, নিচে দাও --</option>
+          </select>
+        </div>
+
+        <!-- Manual override (bot token + channel id) -->
+        <details style="margin-bottom:10px">
+          <summary style="font-size:12px;color:var(--muted);cursor:pointer;margin-bottom:6px">অথবা manually দাও ▸</summary>
+          <div class="settings-row" style="margin-bottom:6px">
+            <label style="font-size:12px;color:var(--muted)">Bot Token</label>
+            <input type="text" id="tgManualToken" placeholder="123456:ABC-DEF..." style="width:100%;background:var(--bg);color:var(--text);border:1px solid var(--border);padding:6px 10px;border-radius:6px">
+          </div>
+          <div class="settings-row">
+            <label style="font-size:12px;color:var(--muted)">Channel ID</label>
+            <input type="text" id="tgManualChannelId" placeholder="-1001234567890" style="width:100%;background:var(--bg);color:var(--text);border:1px solid var(--border);padding:6px 10px;border-radius:6px">
+          </div>
+        </details>
+
+        <!-- Caption -->
+        <div class="settings-row" style="margin-bottom:14px">
+          <label style="font-size:12px;color:var(--muted);margin-bottom:4px;display:block">Caption (optional)</label>
+          <textarea id="tgCaption" rows="3" placeholder="ভিডিওর বিবরণ..." style="width:100%;background:var(--bg);color:var(--text);border:1px solid var(--border);padding:6px 10px;border-radius:6px"></textarea>
+        </div>
+
+        <div id="tgModalStatus" style="font-size:13px;color:var(--muted);margin-bottom:12px;min-height:20px"></div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-primary" id="tgSendBtn" onclick="confirmTelegramUpload()" style="background:#229ED9;border-color:#1a8bbf">✈️ পাঠাও</button>
+          <button class="btn btn-outline" onclick="closeTgModal()">বাতিল</button>
+        </div>
+      </div>
     </div>
 
     <!-- FB/TT upload modal -->
@@ -446,6 +498,19 @@ textarea { resize: vertical; min-height: 70px; }
 
 <!-- ═══ SETTINGS PAGE ═══ -->
 <div class="page" id="page-settings">
+  <div class="card">
+    <div class="card-title">🔊 Transition Sound Library</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:10px">Fade transition-এর সময় যে sound বাজবে। একটা select করো।</div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+      <label class="btn btn-outline" style="padding:6px 14px;font-size:13px;cursor:pointer">
+        📁 Upload Sound
+        <input type="file" id="soundFileInput" accept=".mp3,.wav,.ogg,.m4a" style="display:none" onchange="uploadSound(this)">
+      </label>
+      <span style="font-size:11px;color:var(--muted)">mp3 / wav / ogg / m4a</span>
+    </div>
+    <div id="soundLibList" style="display:flex;flex-direction:column;gap:6px"></div>
+    <div id="soundLibEmpty" style="font-size:12px;color:var(--muted);display:none">কোনো sound নেই — উপরে upload করো</div>
+  </div>
   <div class="card">
     <div class="card-title">🍪 Cookies (YouTube)</div>
     <div class="settings-row">
@@ -571,6 +636,36 @@ textarea { resize: vertical; min-height: 70px; }
       <span class="save-indicator" id="fbSaved">✓ Saved</span>
     </div>
     <div style="font-size:12px;color:var(--muted);margin-top:8px">Keys সেভ করার পর <b>Connect Facebook</b> ক্লিক করো → login করো → token auto-save হবে।</div>
+  </div>
+
+  <!-- ✈️ Telegram Settings Card -->
+  <div class="card" id="tgSettingsCard">
+    <div class="card-title">✈️ Telegram Channels</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:12px">
+      প্রাইভেট চ্যানেলে ভিডিও পাঠাতে Bot Token + Channel ID সেভ করো। বট-কে চ্যানেলের Admin বানাতে হবে।
+    </div>
+
+    <!-- Saved channels list -->
+    <div id="tgChannelList" style="margin-bottom:14px"></div>
+
+    <!-- Add new channel -->
+    <div style="border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:12px">
+      <div style="font-size:12px;font-weight:600;margin-bottom:8px;color:var(--muted)">নতুন চ্যানেল যোগ করো</div>
+      <div class="settings-row" style="margin-bottom:6px">
+        <label style="font-size:12px">চ্যানেলের নাম (label)</label>
+        <input type="text" id="tgNewName" placeholder="যেমন: Islamic BD Channel" style="width:100%;background:var(--bg);color:var(--text);border:1px solid var(--border);padding:6px 10px;border-radius:6px">
+      </div>
+      <div class="settings-row" style="margin-bottom:6px">
+        <label style="font-size:12px">Bot Token</label>
+        <input type="text" id="tgNewToken" placeholder="123456789:ABC-DEFghij..." style="width:100%;background:var(--bg);color:var(--text);border:1px solid var(--border);padding:6px 10px;border-radius:6px">
+      </div>
+      <div class="settings-row" style="margin-bottom:10px">
+        <label style="font-size:12px">Channel ID</label>
+        <input type="text" id="tgNewChannelId" placeholder="-1001234567890" style="width:100%;background:var(--bg);color:var(--text);border:1px solid var(--border);padding:6px 10px;border-radius:6px">
+      </div>
+      <button class="btn btn-primary" onclick="addTgChannel()" style="background:#229ED9;border-color:#1a8bbf">+ চ্যানেল যোগ করো</button>
+    </div>
+    <span class="save-indicator" id="tgChannelSaved">✓ Saved</span>
   </div>
 
   <div class="card">
@@ -859,6 +954,7 @@ async function startJob() {
       mode: isVoiceover ? 'mute' : audioMode,
       audioUrl: document.getElementById('audioUrl').value.trim() || null,
     },
+    enableTransition: document.getElementById('enableTransition').checked,
   };
 
   const btn = document.getElementById('startBtn');
@@ -1046,6 +1142,141 @@ async function uploadDrive() { alert('Google Drive upload — configure OAuth in
 // ── Upload Modal state ──
 let _uploadTarget = null;
 
+// ═══════════════════════════════════════════════════════
+// ✈️ Telegram Upload
+// ═══════════════════════════════════════════════════════
+
+// LocalStorage key
+const TG_CHANNELS_KEY = 'tg_channels';
+
+function getTgChannels() {
+  try { return JSON.parse(localStorage.getItem(TG_CHANNELS_KEY) || '[]'); }
+  catch(_) { return []; }
+}
+
+function saveTgChannels(channels) {
+  localStorage.setItem(TG_CHANNELS_KEY, JSON.stringify(channels));
+}
+
+function renderTgChannelList() {
+  const channels = getTgChannels();
+  const list = document.getElementById('tgChannelList');
+  if (!list) return;
+  if (channels.length === 0) {
+    list.innerHTML = '<div style="font-size:12px;color:var(--muted)">কোনো চ্যানেল সেভ নেই।</div>';
+    return;
+  }
+  list.innerHTML = channels.map((ch, i) => `
+    <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--border);border-radius:6px;margin-bottom:6px">
+      <span style="flex:1;font-size:13px;font-weight:500">✈️ ${ch.name}</span>
+      <span style="font-size:11px;color:var(--muted)">${ch.channelId}</span>
+      <button onclick="deleteTgChannel(${i})" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:16px;padding:0 4px" title="মুছে দাও">×</button>
+    </div>
+  `).join('');
+}
+
+function addTgChannel() {
+  const name      = document.getElementById('tgNewName').value.trim();
+  const token     = document.getElementById('tgNewToken').value.trim();
+  const channelId = document.getElementById('tgNewChannelId').value.trim();
+  if (!name || !token || !channelId) { alert('নাম, Bot Token, আর Channel ID — তিনটাই দাও।'); return; }
+  const channels = getTgChannels();
+  channels.push({ name, token, channelId });
+  saveTgChannels(channels);
+  document.getElementById('tgNewName').value      = '';
+  document.getElementById('tgNewToken').value     = '';
+  document.getElementById('tgNewChannelId').value = '';
+  renderTgChannelList();
+  populateTgChannelSelect();
+  const saved = document.getElementById('tgChannelSaved');
+  if (saved) { saved.style.opacity = 1; setTimeout(() => saved.style.opacity = 0, 2000); }
+}
+
+function deleteTgChannel(i) {
+  const channels = getTgChannels();
+  channels.splice(i, 1);
+  saveTgChannels(channels);
+  renderTgChannelList();
+  populateTgChannelSelect();
+}
+
+function populateTgChannelSelect() {
+  const sel = document.getElementById('tgChannelSelect');
+  if (!sel) return;
+  const channels = getTgChannels();
+  sel.innerHTML = channels.length === 0
+    ? '<option value="">-- চ্যানেল নেই, নিচে manually দাও --</option>'
+    : channels.map((ch, i) => `<option value="${i}">✈️ ${ch.name} (${ch.channelId})</option>`).join('');
+}
+
+function uploadTelegram() {
+  if (!currentJobId) { alert('আগে একটা job complete করো।'); return; }
+  populateTgChannelSelect();
+  document.getElementById('tgCaption').value      = '';
+  document.getElementById('tgModalStatus').textContent = '';
+  document.getElementById('tgManualToken').value  = '';
+  document.getElementById('tgManualChannelId').value = '';
+  document.getElementById('tgUploadModal').style.display = 'flex';
+}
+
+function closeTgModal() {
+  document.getElementById('tgUploadModal').style.display = 'none';
+}
+
+async function confirmTelegramUpload() {
+  const statusEl = document.getElementById('tgModalStatus');
+  const btn      = document.getElementById('tgSendBtn');
+
+  // Resolve token + channelId
+  let botToken, channelId;
+  const selIdx = document.getElementById('tgChannelSelect').value;
+  if (selIdx !== '') {
+    const channels = getTgChannels();
+    const ch = channels[parseInt(selIdx)];
+    if (ch) { botToken = ch.token; channelId = ch.channelId; }
+  }
+  // Manual override
+  const manualToken = document.getElementById('tgManualToken').value.trim();
+  const manualChId  = document.getElementById('tgManualChannelId').value.trim();
+  if (manualToken)  botToken   = manualToken;
+  if (manualChId)   channelId  = manualChId;
+
+  if (!botToken || !channelId) {
+    statusEl.textContent = '❌ Bot Token আর Channel ID দাও।';
+    return;
+  }
+
+  const caption = document.getElementById('tgCaption').value.trim();
+  btn.disabled = true;
+  statusEl.textContent = '⏳ পাঠানো হচ্ছে… (বড় ফাইলে সময় লাগবে)';
+
+  try {
+    const r = await fetch('/api/upload/telegram', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ jobId: currentJobId, botToken, channelId, caption }),
+    });
+    const data = await r.json();
+    if (data.ok) {
+      statusEl.innerHTML = `✅ পাঠানো হয়েছে! Message ID: ${data.messageId}`;
+      btn.disabled = false;
+    } else {
+      statusEl.textContent = '❌ ' + (data.error || 'ব্যর্থ হয়েছে');
+      btn.disabled = false;
+    }
+  } catch(e) {
+    statusEl.textContent = '❌ ' + e.message;
+    btn.disabled = false;
+  }
+}
+
+// Settings page এ channel list render করো
+document.addEventListener('DOMContentLoaded', () => {
+  renderTgChannelList();
+});
+
+// ═══════════════════════════════════════════════════════
+
 function uploadFacebook() {
   _uploadTarget = 'facebook';
   document.getElementById('uploadModalTitle').textContent = '📘 Upload to Facebook';
@@ -1193,7 +1424,65 @@ async function loadSettingsOnPageLoad() {
   }
 }
 
-document.addEventListener('DOMContentLoaded', loadSettingsOnPageLoad);
+
+// ─── Sound Library ────────────────────────────────────────
+let soundMeta = { selected: null, files: [] };
+
+async function loadSoundLib() {
+  const data = await safeFetch('/api/setup/sounds', 'sound-lib');
+  if (data) { soundMeta = data; renderSoundLib(); }
+}
+
+async function uploadSound(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const fd = new FormData();
+  fd.append('sound', file);
+  try {
+    const res = await fetch('/api/setup/sounds', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (data.ok) { await loadSoundLib(); }
+    else alert('Upload failed: ' + (data.error || ''));
+  } catch(e) { alert('Upload error: ' + e.message); }
+  input.value = '';
+}
+
+async function selectSound(filename) {
+  const sel = soundMeta.selected === filename ? null : filename;
+  await fetch('/api/setup/sounds/select', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ filename: sel })
+  });
+  soundMeta.selected = sel;
+  renderSoundLib();
+}
+
+async function deleteSound(filename) {
+  if (!confirm('এই sound মুছে ফেলবো?')) return;
+  await fetch('/api/setup/sounds/' + encodeURIComponent(filename), { method: 'DELETE' });
+  await loadSoundLib();
+}
+
+function renderSoundLib() {
+  const list = document.getElementById('soundLibList');
+  const empty = document.getElementById('soundLibEmpty');
+  if (!list) return;
+  const files = soundMeta.files || [];
+  if (!files.length) { list.innerHTML = ''; empty.style.display = 'block'; return; }
+  empty.style.display = 'none';
+  list.innerHTML = files.map(f => {
+    const isSelected = soundMeta.selected === f.filename;
+    return `<div style="display:flex;align-items:center;gap:8px;background:var(--surface2);border:1px solid ${isSelected ? 'var(--accent)' : 'var(--border)'};border-radius:8px;padding:8px 10px">
+      <audio src="/api/setup/sounds/file/${f.filename}" style="flex:1;height:28px;min-width:0" controls></audio>
+      <span style="font-size:11px;color:var(--muted);max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${f.originalName}</span>
+      <button onclick="selectSound('${f.filename}')" style="font-size:12px;padding:4px 10px;border-radius:6px;background:${isSelected ? 'var(--accent)' : 'var(--surface)'};color:${isSelected ? 'white' : 'var(--text)'};border:1px solid var(--border);cursor:pointer">${isSelected ? '✓ Selected' : 'Use'}</button>
+      <button onclick="deleteSound('${f.filename}')" style="font-size:16px;background:none;border:none;color:var(--muted);cursor:pointer">🗑</button>
+    </div>`;
+  }).join('');
+}
+
+document.addEventListener('DOMContentLoaded', () => { loadSettingsOnPageLoad(); loadSoundLib(); });
 
 // ─── Version ──────────────────────────────────────────────
 async function loadVersion() {
